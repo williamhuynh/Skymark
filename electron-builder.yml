@@ -1,5 +1,6 @@
 appId: dev.sky.skymark
 productName: Skymark
+copyright: Copyright © 2026 William Huynh
 directories:
   output: release/${version}
   buildResources: build
@@ -8,13 +9,17 @@ files:
   - package.json
   - "!**/.vite"
   - "!**/*.map"
+asar: true
 win:
   target:
     - target: nsis
       arch: [x64]
   artifactName: Skymark-${version}-Setup.${ext}
+  publisherName: William Huynh
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
   shortcutName: Skymark
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

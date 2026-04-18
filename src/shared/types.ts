@@ -4,6 +4,7 @@ export type Settings = {
   mcUrl: string;
   defaultSpecialist: Specialist;
   autoDetect: boolean;
+  autostart: boolean;
 };
 
 export type TranscriptEvent = {

@@ -20,6 +20,8 @@ Pairs with:
 
 ## Dev
 
+Works on any OS for iteration on the JS/React side. Audio loopback capture only actually works on Windows, but the UI + MC integration run fine in dev on Linux / macOS against a localhost MC instance.
+
 ```bash
 npm install
 npm run dev
@@ -29,11 +31,29 @@ npm run dev
 
 ## Build (Windows installer)
 
-```bash
+**Build on Windows**, not Linux. electron-builder needs wine to produce an NSIS installer on non-Windows hosts; it's simpler to just build on the target platform.
+
+On your Windows machine:
+
+```powershell
+git clone git@github.com:williamhuynh/Skymark.git
+cd Skymark
+npm install
 npm run build:win
 ```
 
-Output: `release/<version>/Skymark-<version>-Setup.exe`. Unsigned — run it past Windows SmartScreen warnings (personal install).
+Output: `release\<version>\Skymark-<version>-Setup.exe`.
+
+The installer is unsigned — Windows SmartScreen will flag it on first run. Click *More info → Run anyway*. This is a personal / internal app so code signing is explicitly out of scope.
+
+## Install & first run
+
+1. Run `Skymark-<version>-Setup.exe`. Installs per-user (no admin required), creates Start Menu + desktop shortcuts.
+2. Launch Skymark. Main window opens; the app also lives in the system tray.
+3. *Settings* → paste your Deepgram API key → Save. (Stored encrypted via Windows Credential Manager, never on disk in plaintext.)
+4. *Settings* → confirm the Mission Control URL. Default `http://localhost:3002` works if MC runs on the same machine; use the host's Tailscale IP for cross-machine access.
+5. *Settings* → flip "Start on login" if you want Skymark to auto-launch (minimised to tray).
+6. *Meeting* tab → pick a specialist → *Start*. Grant audio + screen permissions when Chromium asks.
 
 ## Architecture
 
@@ -74,14 +94,15 @@ Matches Mission Control's contract (`apps/mission-control/src/server/routes/meet
 ## Roadmap
 
 - [x] **Scaffold** — Electron shell, tray, settings, API key storage
-- [ ] **Audio capture** — WASAPI loopback + mic via `naudiodon`, mixed 16 kHz mono PCM
-- [ ] **Deepgram streaming** — Nova-3 WebSocket, diarise, punctuate, per-specialist keyterms
-- [ ] **Live transcript UI** — sidebar window, speaker-coloured bubbles, auto-scroll
-- [ ] **MC integration** — create meeting on detect, stream transcript, subscribe to nudges/answers
-- [ ] **Meeting auto-detect** — poll for `ms-teams.exe` + Chrome/Edge tabs on `meet.google.com`
-- [ ] **Ask-a-question** — Ctrl+K composer → `/api/meetings/:id/ask`
-- [ ] **Installer** — `electron-builder --win` NSIS, autostart on login
-- [ ] **Global hotkey** — toggle sidebar
-- [ ] **aid-coo integration** — once naa-project proves out (copy/paste per the pattern doc)
+- [x] **Audio capture** — system loopback via Electron desktopCapturer + mic via getUserMedia, Web Audio mixer → 16 kHz mono PCM
+- [x] **Deepgram streaming** — Nova-3 WebSocket in main, diarise, punctuate, interim results
+- [x] **Live transcript UI** — speaker-coloured bubbles, auto-scroll with pause-on-scroll-up
+- [x] **MC integration** — createMeeting on start, stream WS, subscribe WS for nudges + answers, end hook on stop
+- [x] **Ask-a-question** — composer → `/api/meetings/:id/ask`, matches answers to pending questions
+- [x] **Always-on-top sidebar** — compact second window for live use during calls
+- [x] **Installer** — NSIS via electron-builder (build on Windows)
+- [x] **Autostart on login** — settings toggle writes Windows login-item registry
+- [ ] **Meeting auto-detect** — poll `ms-teams.exe` + Chrome tabs on `meet.google.com`, tray toast to start
+- [ ] **aid-coo integration** — apply in-meeting pattern to aid-coo (copy-paste per pattern doc)
 
-Explicitly not v1: code signing, auto-update.
+Explicitly not v1: code signing, auto-update, global hotkey.

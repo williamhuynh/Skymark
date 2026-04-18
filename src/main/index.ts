@@ -33,8 +33,21 @@ const store = new Store<StoreSchema>({
     mcUrl: 'http://localhost:3002',
     defaultSpecialist: 'none',
     autoDetect: false,
+    autostart: false,
   },
 });
+
+function applyAutostart(enabled: boolean): void {
+  if (process.platform !== 'win32' && process.platform !== 'darwin') return;
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      openAsHidden: true,
+    });
+  } catch (err) {
+    console.warn('[autostart] setLoginItemSettings failed:', err);
+  }
+}
 
 const meeting = new MeetingSession(store);
 
@@ -185,6 +198,9 @@ function registerIpc() {
   ipcMain.handle('settings:get', () => publicSettings());
   ipcMain.handle('settings:set', (_e, patch: Partial<Settings>) => {
     store.store = { ...store.store, ...patch };
+    if (Object.prototype.hasOwnProperty.call(patch, 'autostart')) {
+      applyAutostart(Boolean(patch.autostart));
+    }
     return publicSettings();
   });
 
@@ -248,6 +264,8 @@ app.whenReady().then(() => {
   createTray();
   registerIpc();
   wireSessionBroadcast();
+  // Reconcile OS autostart state with the stored preference on each launch.
+  applyAutostart(Boolean(store.get('autostart')));
 });
 
 app.on('before-quit', async () => {

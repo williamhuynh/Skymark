@@ -314,6 +314,18 @@ export function App() {
               <span>Watch Teams / Meet, show toast on call start</span>
             </label>
           </div>
+
+          <div className="card">
+            <h2>Start on login</h2>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.autostart}
+                onChange={(e) => void save({ autostart: e.target.checked })}
+              />
+              <span>Launch Skymark automatically (minimised to tray) when Windows starts</span>
+            </label>
+          </div>
         </section>
       )}
 
