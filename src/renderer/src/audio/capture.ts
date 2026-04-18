@@ -22,15 +22,24 @@ const TARGET_SAMPLE_RATE = 16000;
 const CHUNK_MS = 100;
 
 async function getSystemAudioStream(): Promise<MediaStream | null> {
-  // Electron >= 27: desktopCapturer lives in main but we can use getDisplayMedia
-  // with 'chromeMediaSource: desktop' in renderer when a session handler is set.
-  // Simpler: ask for audio-only display capture.
+  // Chromium rejects getDisplayMedia with video:false — display capture must
+  // include video. Our main-process displayMediaRequestHandler returns a screen
+  // source + audio:'loopback'; we take the audio tracks and discard the video
+  // track here so we don't keep a capture alive we don't need.
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: false,
+      video: true,
       audio: true,
     });
-    // If the user declines screen+audio prompt, this rejects.
+    // Stop + drop any video tracks — we only want the system audio.
+    for (const track of stream.getVideoTracks()) {
+      track.stop();
+      stream.removeTrack(track);
+    }
+    if (stream.getAudioTracks().length === 0) {
+      console.warn('[audio] system audio capture returned no audio tracks');
+      return null;
+    }
     return stream;
   } catch (err) {
     console.warn('[audio] system audio capture failed:', err);
