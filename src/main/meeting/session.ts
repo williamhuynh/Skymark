@@ -211,8 +211,30 @@ export class MeetingSession extends EventEmitter {
     }
   }
 
+  private ipcChunkCount = 0;
+
   sendAudio(chunk: ArrayBuffer): void {
-    if (!this.deepgram) return;
+    this.ipcChunkCount++;
+    if (this.ipcChunkCount === 1) {
+      const view = new Int16Array(chunk);
+      let min = 0, max = 0, absSum = 0;
+      for (let i = 0; i < view.length; i++) {
+        if (view[i] < min) min = view[i];
+        if (view[i] > max) max = view[i];
+        absSum += Math.abs(view[i]);
+      }
+      const avg = Math.round(absSum / view.length);
+      log.info(
+        `[session] first IPC audio chunk: ${chunk.byteLength}B, samples=${view.length}, ` +
+          `min=${min}, max=${max}, avgAbs=${avg} (${avg < 50 ? 'SILENT' : 'has signal'})`,
+      );
+    } else if (this.ipcChunkCount % 100 === 0) {
+      log.info(`[session] forwarded ${this.ipcChunkCount} IPC chunks to Deepgram`);
+    }
+    if (!this.deepgram) {
+      log.warn('[session] received audio chunk but Deepgram client is null');
+      return;
+    }
     this.deepgram.sendAudio(Buffer.from(chunk));
   }
 
@@ -229,6 +251,8 @@ export class MeetingSession extends EventEmitter {
   }
 
   async stop(): Promise<void> {
+    log.info(`[session] stopping; saw ${this.ipcChunkCount} IPC audio chunks total`);
+    this.ipcChunkCount = 0;
     this.wantsActive = false;
     for (const [, timer] of this.reconnectTimers) clearTimeout(timer);
     this.reconnectTimers.clear();

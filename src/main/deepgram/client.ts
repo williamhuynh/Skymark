@@ -1,5 +1,6 @@
 import { WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
+import log from 'electron-log/main';
 import type { TranscriptEvent } from '../../shared/types';
 
 const CONNECT_TIMEOUT_MS = 10_000;
@@ -107,9 +108,17 @@ export class DeepgramClient extends EventEmitter {
         }
       });
 
+      let firstTranscript = true;
       ws.on('message', (data) => {
         try {
           const msg = JSON.parse(data.toString()) as DeepgramResult;
+          if (firstTranscript && msg.type === 'Results') {
+            firstTranscript = false;
+            log.info(
+              '[deepgram] first Results received; has_transcript=' +
+                Boolean(msg.channel?.alternatives?.[0]?.transcript),
+            );
+          }
           this.handleMessage(msg);
         } catch {
           // Ignore non-JSON messages.
@@ -151,9 +160,27 @@ export class DeepgramClient extends EventEmitter {
     this.emit('transcript', ev);
   }
 
+  private wsSendCount = 0;
+  private wsSendBytes = 0;
+
   sendAudio(buf: Buffer | ArrayBuffer): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      if (this.wsSendCount === 0) {
+        log.warn('[deepgram] sendAudio called but ws not open, state:', this.ws?.readyState);
+      }
+      return;
+    }
     this.ws.send(buf);
+    this.wsSendCount++;
+    const byteLen = (buf as Buffer).byteLength ?? (buf as ArrayBuffer).byteLength;
+    this.wsSendBytes += byteLen;
+    if (this.wsSendCount === 1) {
+      log.info(`[deepgram] first audio frame sent, ${byteLen}B`);
+    }
+  }
+
+  getStats(): { sent: number; bytes: number } {
+    return { sent: this.wsSendCount, bytes: this.wsSendBytes };
   }
 
   private startKeepAlive(): void {
@@ -177,6 +204,9 @@ export class DeepgramClient extends EventEmitter {
   }
 
   async close(): Promise<void> {
+    log.info(
+      `[deepgram] closing; sent ${this.wsSendCount} frames / ${this.wsSendBytes} bytes total`,
+    );
     this.closed = true;
     this.stopKeepAlive();
     if (!this.ws) return;
