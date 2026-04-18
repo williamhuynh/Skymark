@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, ExternalLink, History as HistoryIcon } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { RefreshCw, ExternalLink, History as HistoryIcon, FileText } from 'lucide-react';
 import type { MeetingRow, Specialist } from '../../shared/types';
 import { SPECIALIST_LABELS } from '../../shared/types';
+
+function stripFrontmatter(md: string): string {
+  if (!md.startsWith('---')) return md;
+  const end = md.indexOf('\n---', 3);
+  if (end === -1) return md;
+  return md.slice(end + 4).replace(/^\s*\n/, '');
+}
 
 function specialistLabel(key: string | null): string {
   if (!key) return 'None';
@@ -47,6 +56,9 @@ export function History({ mcUrl }: { mcUrl: string }) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MeetingRow | null>(null);
+  const [archiveMd, setArchiveMd] = useState<string | null>(null);
+  const [archiveStatus, setArchiveStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [archiveError, setArchiveError] = useState<string | null>(null);
 
   async function load() {
     setStatus('loading');
@@ -68,6 +80,32 @@ export function History({ mcUrl }: { mcUrl: string }) {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!selected) {
+      setArchiveMd(null);
+      setArchiveStatus('idle');
+      return;
+    }
+    let cancelled = false;
+    setArchiveStatus('loading');
+    setArchiveError(null);
+    void (async () => {
+      const res = await window.skymark.mc.getArchive(selected.id);
+      if (cancelled) return;
+      if (res.ok) {
+        setArchiveMd(stripFrontmatter(res.markdown));
+        setArchiveStatus('idle');
+      } else {
+        setArchiveMd(null);
+        setArchiveError(res.error);
+        setArchiveStatus('error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.id]);
 
   return (
     <section className="history">
@@ -133,6 +171,28 @@ export function History({ mcUrl }: { mcUrl: string }) {
                 ) : (
                   <p className="help">No summary yet.</p>
                 )}
+
+                <div className="archive-section">
+                  <div className="archive-header">
+                    <FileText size={13} />
+                    <span>Full transcript</span>
+                    {archiveStatus === 'loading' && (
+                      <span className="archive-status">loading…</span>
+                    )}
+                  </div>
+                  {archiveStatus === 'error' && (
+                    <p className="status error">Couldn't load archive: {archiveError}</p>
+                  )}
+                  {archiveMd && (
+                    <div className="archive-body">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{archiveMd}</ReactMarkdown>
+                    </div>
+                  )}
+                  {!archiveMd && archiveStatus === 'idle' && (
+                    <p className="help">No transcript archived yet.</p>
+                  )}
+                </div>
+
                 <button
                   className="ghost"
                   onClick={() =>

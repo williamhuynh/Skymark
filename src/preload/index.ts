@@ -58,6 +58,7 @@ const api: SkymarkApi = {
   mc: {
     testConnection: (url: string) => ipcRenderer.invoke('mc:test-connection', url),
     listMeetings: (limit?: number) => ipcRenderer.invoke('mc:list-meetings', limit),
+    getArchive: (meetingId: string) => ipcRenderer.invoke('mc:get-archive', meetingId),
   },
   updater: {
     getVersion: () => ipcRenderer.invoke('updater:get-version'),

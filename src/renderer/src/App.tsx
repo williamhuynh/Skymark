@@ -52,6 +52,7 @@ export function App() {
   const [events, setEvents] = useState<TranscriptEvent[]>([]);
   const [interim, setInterim] = useState<TranscriptEvent | null>(null);
   const [pickedSpecialist, setPickedSpecialist] = useState<Specialist>('naa-project');
+  const [meetingTitle, setMeetingTitle] = useState<string>('');
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [askInput, setAskInput] = useState('');
   const [askPending, setAskPending] = useState<string | null>(null);
@@ -196,7 +197,17 @@ export function App() {
     setInterim(null);
     setFeed([]);
 
-    const result = await window.skymark.session.start({ specialist: pickedSpecialist });
+    const trimmedTitle = meetingTitle.trim();
+    const defaultTitle = `Meeting ${new Date().toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
+    const result = await window.skymark.session.start({
+      specialist: pickedSpecialist,
+      title: trimmedTitle || defaultTitle,
+    });
     if (!result.ok) {
       setSessionState({ phase: 'error', message: result.error });
       return;
@@ -298,6 +309,16 @@ export function App() {
         <History mcUrl={settings.mcUrl} />
       ) : tab === 'meeting' ? (
         <section className="meeting">
+          <input
+            type="text"
+            className="meeting-title-input"
+            placeholder="Meeting title (optional — used for filename slug)"
+            value={meetingTitle}
+            onChange={(e) => setMeetingTitle(e.target.value)}
+            disabled={isActive}
+            maxLength={80}
+            aria-label="Meeting title"
+          />
           <div className="meeting-controls">
             <select
               value={pickedSpecialist}
