@@ -72,4 +72,7 @@ export type SkymarkApi = {
     onNudge: (cb: (n: Nudge) => void) => () => void;
     onAnswer: (cb: (a: QuestionAnswer) => void) => () => void;
   };
+  window: {
+    toggleSidebar: () => Promise<void>;
+  };
 };

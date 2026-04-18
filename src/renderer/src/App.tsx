@@ -209,6 +209,13 @@ export function App() {
             ) : (
               <button onClick={startMeeting}>Start</button>
             )}
+            <button
+              className="ghost"
+              onClick={() => void window.skymark.window.toggleSidebar()}
+              title="Open the always-on-top sidebar"
+            >
+              Sidebar
+            </button>
           </div>
 
           <StatusBar state={sessionState} linked={mcLinked && isActive} />

@@ -239,6 +239,61 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* Sidebar window ------------------------------------------------- */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 10px;
+  gap: 8px;
+}
+
+.sidebar .transcript {
+  flex: 1 1 60%;
+  min-height: 120px;
+  font-size: 13px;
+}
+
+.sidebar-feed {
+  flex: 0 0 auto;
+  max-height: 35%;
+  min-height: 60px;
+  gap: 6px;
+}
+
+.sidebar-status {
+  padding: 6px 10px;
+  font-size: 11px;
+}
+
+.sidebar-empty {
+  margin: auto 0;
+  text-align: center;
+  color: #5b6371;
+}
+
+.sidebar-empty p {
+  margin: 0;
+}
+
+.sidebar-empty-hint {
+  margin-top: 4px !important;
+  font-size: 12px;
+}
+
+.sidebar .ask {
+  margin-top: 0;
+}
+
+.sidebar .ask input {
+  font-size: 13px;
+}
+
+.sidebar .ask button {
+  padding: 6px 10px;
+}
+
 .transcript-empty {
   margin: auto;
   color: #5b6371;
@@ -350,6 +405,17 @@ button.danger {
 
 button.danger:hover:not(:disabled) {
   background: #d94a4a;
+}
+
+button.ghost {
+  background: transparent;
+  border: 1px solid #2a313c;
+  color: #a8b2c2;
+}
+
+button.ghost:hover:not(:disabled) {
+  background: #1a2028;
+  color: #e8ecf1;
 }
 
 button:disabled {

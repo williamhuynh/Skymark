@@ -47,6 +47,9 @@ const api: SkymarkApi = {
       return () => ipcRenderer.removeListener('session:answer', handler);
     },
   },
+  window: {
+    toggleSidebar: () => ipcRenderer.invoke('window:toggle-sidebar'),
+  },
 };
 
 contextBridge.exposeInMainWorld('skymark', api);

@@ -8,6 +8,7 @@ import {
   ipcMain,
   session,
   desktopCapturer,
+  screen,
 } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -38,12 +39,33 @@ const store = new Store<StoreSchema>({
 const meeting = new MeetingSession(store);
 
 let tray: Tray | null = null;
-let window: BrowserWindow | null = null;
+let mainWindow: BrowserWindow | null = null;
+let sidebarWindow: BrowserWindow | null = null;
 let isQuitting = false;
 
-function createWindow() {
-  window = new BrowserWindow({
-    width: 720,
+function rendererEntry(view: 'main' | 'sidebar'): { kind: 'url'; value: string } | { kind: 'file'; value: string; hash: string } {
+  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
+    return { kind: 'url', value: `${process.env['ELECTRON_RENDERER_URL']}#${view}` };
+  }
+  return {
+    kind: 'file',
+    value: path.join(__dirname, '../renderer/index.html'),
+    hash: view,
+  };
+}
+
+function loadView(win: BrowserWindow, view: 'main' | 'sidebar'): void {
+  const entry = rendererEntry(view);
+  if (entry.kind === 'url') {
+    void win.loadURL(entry.value);
+  } else {
+    void win.loadFile(entry.value, { hash: entry.hash });
+  }
+}
+
+function createMainWindow() {
+  mainWindow = new BrowserWindow({
+    width: 800,
     height: 720,
     show: false,
     title: 'Skymark',
@@ -54,40 +76,82 @@ function createWindow() {
     },
   });
 
-  window.on('close', (event) => {
+  mainWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();
-      window?.hide();
+      mainWindow?.hide();
     }
   });
 
-  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-    void window.loadURL(process.env['ELECTRON_RENDERER_URL']);
-  } else {
-    void window.loadFile(path.join(__dirname, '../renderer/index.html'));
-  }
-
-  meeting.on('state', (state: SessionState) => {
-    window?.webContents.send('session:state', state);
-  });
-  meeting.on('transcript', (ev: TranscriptEvent) => {
-    window?.webContents.send('session:transcript', ev);
-  });
-  meeting.on('nudge', (n: Nudge) => {
-    window?.webContents.send('session:nudge', n);
-  });
-  meeting.on('answer', (a: QuestionAnswer) => {
-    window?.webContents.send('session:answer', a);
-  });
+  loadView(mainWindow, 'main');
 }
 
-function toggleWindow() {
-  if (!window) return;
-  if (window.isVisible()) {
-    window.hide();
+function createSidebarWindow() {
+  if (sidebarWindow && !sidebarWindow.isDestroyed()) {
+    sidebarWindow.show();
+    sidebarWindow.focus();
+    return;
+  }
+
+  const display = screen.getPrimaryDisplay();
+  const width = 380;
+  const height = Math.min(780, display.workArea.height - 40);
+  const x = display.workArea.x + display.workArea.width - width - 20;
+  const y = display.workArea.y + 20;
+
+  sidebarWindow = new BrowserWindow({
+    width,
+    height,
+    x,
+    y,
+    title: 'Skymark',
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    resizable: true,
+    minimizable: true,
+    maximizable: false,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.mjs'),
+      sandbox: true,
+      contextIsolation: true,
+    },
+  });
+
+  sidebarWindow.on('closed', () => {
+    sidebarWindow = null;
+  });
+
+  loadView(sidebarWindow, 'sidebar');
+}
+
+function toggleMainWindow() {
+  if (!mainWindow) return;
+  if (mainWindow.isVisible()) {
+    mainWindow.hide();
   } else {
-    window.show();
-    window.focus();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+}
+
+function toggleSidebar() {
+  if (sidebarWindow && !sidebarWindow.isDestroyed()) {
+    if (sidebarWindow.isVisible()) {
+      sidebarWindow.hide();
+    } else {
+      sidebarWindow.show();
+      sidebarWindow.focus();
+    }
+    return;
+  }
+  createSidebarWindow();
+}
+
+function broadcast(channel: string, payload: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, payload);
+    }
   }
 }
 
@@ -97,7 +161,8 @@ function createTray() {
   tray.setToolTip('Skymark');
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open Skymark', click: toggleWindow },
+      { label: 'Open Skymark', click: toggleMainWindow },
+      { label: 'Toggle sidebar', click: toggleSidebar },
       { type: 'separator' },
       {
         label: 'Quit',
@@ -108,7 +173,7 @@ function createTray() {
       },
     ]),
   );
-  tray.on('click', toggleWindow);
+  tray.on('click', toggleMainWindow);
 }
 
 function publicSettings(): Settings {
@@ -156,22 +221,33 @@ function registerIpc() {
   ipcMain.on('session:audio', (_e, chunk: ArrayBuffer) => {
     meeting.sendAudio(chunk);
   });
+
+  ipcMain.handle('window:toggle-sidebar', () => {
+    toggleSidebar();
+  });
 }
 
 function registerDisplayMediaHandler() {
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
-    // Audio-only system capture: return the primary screen, ask Chromium to mix audio.
     void desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
       callback({ video: sources[0], audio: 'loopback' });
     });
   });
 }
 
+function wireSessionBroadcast() {
+  meeting.on('state', (state: SessionState) => broadcast('session:state', state));
+  meeting.on('transcript', (ev: TranscriptEvent) => broadcast('session:transcript', ev));
+  meeting.on('nudge', (n: Nudge) => broadcast('session:nudge', n));
+  meeting.on('answer', (a: QuestionAnswer) => broadcast('session:answer', a));
+}
+
 app.whenReady().then(() => {
   registerDisplayMediaHandler();
-  createWindow();
+  createMainWindow();
   createTray();
   registerIpc();
+  wireSessionBroadcast();
 });
 
 app.on('before-quit', async () => {
@@ -180,5 +256,5 @@ app.on('before-quit', async () => {
 });
 
 app.on('window-all-closed', () => {
-  // Keep running in the tray. macOS would traditionally quit, but we hide anyway.
+  // Stay alive in the tray.
 });
