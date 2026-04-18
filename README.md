@@ -29,31 +29,45 @@ npm run dev
 
 `electron-vite dev` runs main + preload + renderer with hot reload.
 
-## Build (Windows installer)
+## Install (end user)
 
-**Build on Windows**, not Linux. electron-builder needs wine to produce an NSIS installer on non-Windows hosts; it's simpler to just build on the target platform.
+Grab the latest signed-for-you-only Windows installer from the [Releases page](https://github.com/williamhuynh/Skymark/releases):
 
-On your Windows machine:
+1. Download `Skymark-<version>-Setup.exe`
+2. Run it (Windows SmartScreen may flag unsigned — *More info → Run anyway*)
+3. Installs per-user, no admin required
+
+No Node / Git / toolchain needed. The installer bundles everything.
+
+## First run
+
+1. Launch Skymark. The Onboarding panel prompts for your Deepgram API key — paste it (validated against Deepgram before it's stored encrypted via Windows Credential Manager).
+2. Settings → *Mission Control URL* → enter your host's Tailscale IP, e.g. `http://100.x.y.z:3002`, and hit *Test*.
+3. Optionally enable *Start on login* and *Auto-detect meetings*.
+4. Meeting tab → pick a specialist → *Start*. Grant screen-share + mic permissions when prompted.
+
+## Build from source (maintainer)
+
+Only needed if you want to iterate on the code. Otherwise grab the prebuilt installer from Releases.
 
 ```powershell
 git clone git@github.com:williamhuynh/Skymark.git
 cd Skymark
 npm install
-npm run build:win
+npm run dev         # hot reload, no installer
+npm run build:win   # produces release\<version>\Skymark-<version>-Setup.exe
 ```
 
-Output: `release\<version>\Skymark-<version>-Setup.exe`.
+Releases are auto-built by `.github/workflows/release.yml` on every `v*` tag push — see [Release process](#release-process).
 
-The installer is unsigned — Windows SmartScreen will flag it on first run. Click *More info → Run anyway*. This is a personal / internal app so code signing is explicitly out of scope.
+## Release process
 
-## Install & first run
-
-1. Run `Skymark-<version>-Setup.exe`. Installs per-user (no admin required), creates Start Menu + desktop shortcuts.
-2. Launch Skymark. Main window opens; the app also lives in the system tray.
-3. *Settings* → paste your Deepgram API key → Save. (Stored encrypted via Windows Credential Manager, never on disk in plaintext.)
-4. *Settings* → confirm the Mission Control URL. Default `http://localhost:3002` works if MC runs on the same machine; use the host's Tailscale IP for cross-machine access.
-5. *Settings* → flip "Start on login" if you want Skymark to auto-launch (minimised to tray).
-6. *Meeting* tab → pick a specialist → *Start*. Grant audio + screen permissions when Chromium asks.
+1. Bump `version` in `package.json`
+2. Commit + tag: `git tag v0.0.2 && git push origin v0.0.2`
+3. GitHub Actions spins up `windows-latest`, runs typecheck + `npm run publish:win`
+4. electron-builder uploads the installer as a draft release
+5. Go to the [Releases page](https://github.com/williamhuynh/Skymark/releases), review, publish
+6. End users download the new `.exe` and re-install (settings + encrypted key are preserved by `electron-store`)
 
 ## Architecture
 

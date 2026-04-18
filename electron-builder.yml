@@ -23,3 +23,8 @@ nsis:
   shortcutName: Skymark
   createDesktopShortcut: true
   createStartMenuShortcut: true
+publish:
+  provider: github
+  owner: williamhuynh
+  repo: Skymark
+  releaseType: draft
