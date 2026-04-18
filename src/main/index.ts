@@ -41,6 +41,14 @@ const store = new Store<StoreSchema>({
   },
 });
 
+const meeting = new MeetingSession(store);
+const detector = new MeetingDetector();
+
+let tray: Tray | null = null;
+let mainWindow: BrowserWindow | null = null;
+let sidebarWindow: BrowserWindow | null = null;
+let isQuitting = false;
+
 function applyAutostart(enabled: boolean): void {
   if (process.platform !== 'win32' && process.platform !== 'darwin') return;
   try {
@@ -81,7 +89,6 @@ async function handleDetectedMeeting(detected: DetectedMeeting): Promise<void> {
       return;
     }
     if (specialist === 'none') {
-      // No default set — open the main window so the user picks.
       mainWindow?.show();
       mainWindow?.focus();
       return;
@@ -91,14 +98,6 @@ async function handleDetectedMeeting(detected: DetectedMeeting): Promise<void> {
 
   notification.show();
 }
-
-const meeting = new MeetingSession(store);
-const detector = new MeetingDetector();
-
-let tray: Tray | null = null;
-let mainWindow: BrowserWindow | null = null;
-let sidebarWindow: BrowserWindow | null = null;
-let isQuitting = false;
 
 function rendererEntry(view: 'main' | 'sidebar'): { kind: 'url'; value: string } | { kind: 'file'; value: string; hash: string } {
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {

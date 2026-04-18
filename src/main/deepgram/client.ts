@@ -188,8 +188,4 @@ export class DeepgramClient extends EventEmitter {
     this.ws.close();
     this.ws = null;
   }
-
-  get isConnected(): boolean {
-    return !!this.ws && this.ws.readyState === WebSocket.OPEN && !this.closed;
-  }
 }

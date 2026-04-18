@@ -48,8 +48,8 @@ export function TranscriptView({ events, interim }: Props) {
       {events.length === 0 && !interim && (
         <p className="transcript-empty">Waiting for audio…</p>
       )}
-      {events.map((ev, i) => (
-        <div key={i} className="bubble">
+      {events.map((ev) => (
+        <div key={`${ev.startMs}-${ev.speaker ?? 'unk'}-${ev.text.length}`} className="bubble">
           <span className="speaker" style={{ color: speakerColour(ev.speaker) }}>
             {ev.speaker ?? 'Speaker'}
           </span>
