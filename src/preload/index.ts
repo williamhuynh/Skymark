@@ -49,6 +49,10 @@ const api: SkymarkApi = {
   },
   window: {
     toggleSidebar: () => ipcRenderer.invoke('window:toggle-sidebar'),
+    showMain: () => ipcRenderer.invoke('window:show-main'),
+  },
+  mc: {
+    testConnection: (url: string) => ipcRenderer.invoke('mc:test-connection', url),
   },
 };
 

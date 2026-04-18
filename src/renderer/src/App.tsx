@@ -11,6 +11,7 @@ import { SPECIALIST_LABELS } from '../../shared/types';
 import { startAudioCapture, type AudioCaptureHandle } from './audio/capture';
 import { TranscriptView } from './TranscriptView';
 import { Onboarding } from './Onboarding';
+import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 
 type Tab = 'meeting' | 'settings';
 
@@ -44,6 +45,21 @@ export function App() {
   const captureRef = useRef<AudioCaptureHandle | null>(null);
   const pendingQuestions = useRef<Map<string, string>>(new Map());
 
+  const [mcUrlDraft, setMcUrlDraft] = useState<string>('');
+  const [savedField, setSavedField] = useState<string | null>(null);
+  const [mcTest, setMcTest] = useState<'idle' | 'testing' | 'ok' | string>('idle');
+
+  const flashSaved = (field: string) => {
+    setSavedField(field);
+    setTimeout(() => setSavedField((s) => (s === field ? null : s)), 1500);
+  };
+
+  const saveMcUrl = useDebouncedCallback(async (url: string) => {
+    await window.skymark.settings.set({ mcUrl: url });
+    setSettings((prev) => (prev ? { ...prev, mcUrl: url } : prev));
+    flashSaved('mcUrl');
+  }, 500);
+
   useEffect(() => {
     void (async () => {
       const [s, has, st] = await Promise.all([
@@ -55,6 +71,7 @@ export function App() {
       setHasKey(has);
       setSessionState(st);
       setPickedSpecialist(s.defaultSpecialist === 'none' ? 'naa-project' : s.defaultSpecialist);
+      setMcUrlDraft(s.mcUrl);
     })();
 
     const offState = window.skymark.session.onState((next) => setSessionState(next));
@@ -112,9 +129,16 @@ export function App() {
     };
   }, []);
 
-  async function save(patch: Partial<Settings>) {
+  async function save(patch: Partial<Settings>, field?: string) {
     const next = await window.skymark.settings.set(patch);
     setSettings(next);
+    if (field) flashSaved(field);
+  }
+
+  async function testMc() {
+    setMcTest('testing');
+    const res = await window.skymark.mc.testConnection(mcUrlDraft);
+    setMcTest(res.ok ? 'ok' : res.error);
   }
 
   async function saveKey() {
@@ -312,21 +336,42 @@ export function App() {
           </div>
 
           <div className="card">
-            <h2>Mission Control URL</h2>
+            <h2>
+              Mission Control URL
+              {savedField === 'mcUrl' && <span className="saved-flag">Saved</span>}
+            </h2>
             <p className="help">Your MC instance. Use the host's Tailscale IP for cross-machine access.</p>
-            <input
-              type="text"
-              value={settings.mcUrl}
-              onChange={(e) => void save({ mcUrl: e.target.value })}
-              spellCheck={false}
-            />
+            <div className="row">
+              <input
+                type="text"
+                value={mcUrlDraft}
+                onChange={(e) => {
+                  setMcUrlDraft(e.target.value);
+                  setMcTest('idle');
+                  saveMcUrl(e.target.value);
+                }}
+                spellCheck={false}
+              />
+              <button className="ghost" onClick={() => void testMc()} disabled={mcTest === 'testing'}>
+                {mcTest === 'testing' ? 'Testing…' : 'Test'}
+              </button>
+            </div>
+            {mcTest === 'ok' && <p className="status ok">Reachable.</p>}
+            {mcTest !== 'idle' && mcTest !== 'testing' && mcTest !== 'ok' && (
+              <p className="status error">{mcTest}</p>
+            )}
           </div>
 
           <div className="card">
-            <h2>Default specialist</h2>
+            <h2>
+              Default specialist
+              {savedField === 'defaultSpecialist' && <span className="saved-flag">Saved</span>}
+            </h2>
             <select
               value={settings.defaultSpecialist}
-              onChange={(e) => void save({ defaultSpecialist: e.target.value as Specialist })}
+              onChange={(e) =>
+                void save({ defaultSpecialist: e.target.value as Specialist }, 'defaultSpecialist')
+              }
             >
               <option value="none">None (ask each time)</option>
               <option value="naa-project">{SPECIALIST_LABELS['naa-project']}</option>
@@ -335,24 +380,30 @@ export function App() {
           </div>
 
           <div className="card">
-            <h2>Auto-detect meetings</h2>
+            <h2>
+              Auto-detect meetings
+              {savedField === 'autoDetect' && <span className="saved-flag">Saved</span>}
+            </h2>
             <label className="toggle">
               <input
                 type="checkbox"
                 checked={settings.autoDetect}
-                onChange={(e) => void save({ autoDetect: e.target.checked })}
+                onChange={(e) => void save({ autoDetect: e.target.checked }, 'autoDetect')}
               />
               <span>Watch Teams / Meet, show toast on call start</span>
             </label>
           </div>
 
           <div className="card">
-            <h2>Start on login</h2>
+            <h2>
+              Start on login
+              {savedField === 'autostart' && <span className="saved-flag">Saved</span>}
+            </h2>
             <label className="toggle">
               <input
                 type="checkbox"
                 checked={settings.autostart}
-                onChange={(e) => void save({ autostart: e.target.checked })}
+                onChange={(e) => void save({ autostart: e.target.checked }, 'autostart')}
               />
               <span>Launch Skymark automatically (minimised to tray) when Windows starts</span>
             </label>

@@ -91,5 +91,9 @@ export type SkymarkApi = {
   };
   window: {
     toggleSidebar: () => Promise<void>;
+    showMain: () => Promise<void>;
+  };
+  mc: {
+    testConnection: (url: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   };
 };

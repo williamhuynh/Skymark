@@ -304,6 +304,28 @@ function registerIpc() {
   ipcMain.handle('window:toggle-sidebar', () => {
     toggleSidebar();
   });
+
+  ipcMain.handle('window:show-main', () => {
+    if (!mainWindow) return;
+    mainWindow.show();
+    mainWindow.focus();
+  });
+
+  ipcMain.handle('mc:test-connection', async (_e, url: string) => {
+    if (!url || typeof url !== 'string') {
+      return { ok: false, error: 'No URL configured' };
+    }
+    const trimmed = url.replace(/\/$/, '');
+    try {
+      const res = await fetch(`${trimmed}/api/meetings?limit=1`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) return { ok: true };
+      return { ok: false, error: `HTTP ${res.status} ${res.statusText}` };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
 }
 
 function registerDisplayMediaHandler() {
