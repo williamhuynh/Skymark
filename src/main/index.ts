@@ -1,8 +1,19 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, safeStorage, ipcMain } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  Tray,
+  Menu,
+  nativeImage,
+  safeStorage,
+  ipcMain,
+  session,
+  desktopCapturer,
+} from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import Store from 'electron-store';
-import type { Settings } from '../shared/types';
+import type { Settings, SessionState, StartSessionArgs, TranscriptEvent } from '../shared/types';
+import { MeetingSession } from './meeting/session';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
@@ -17,16 +28,17 @@ const store = new Store<StoreSchema>({
   },
 });
 
+const meeting = new MeetingSession(store);
+
 let tray: Tray | null = null;
 let window: BrowserWindow | null = null;
 let isQuitting = false;
 
 function createWindow() {
   window = new BrowserWindow({
-    width: 420,
-    height: 640,
+    width: 720,
+    height: 720,
     show: false,
-    resizable: false,
     title: 'Skymark',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),
@@ -47,6 +59,13 @@ function createWindow() {
   } else {
     void window.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
+
+  meeting.on('state', (state: SessionState) => {
+    window?.webContents.send('session:state', state);
+  });
+  meeting.on('transcript', (ev: TranscriptEvent) => {
+    window?.webContents.send('session:transcript', ev);
+  });
 }
 
 function toggleWindow() {
@@ -79,16 +98,15 @@ function createTray() {
   tray.on('click', toggleWindow);
 }
 
-function publicSettings(): Omit<Settings, 'deepgramKeyEncrypted'> {
+function publicSettings(): Settings {
   const { deepgramKeyEncrypted: _ignored, ...rest } = store.store;
   return rest;
 }
 
 function registerIpc() {
   ipcMain.handle('settings:get', () => publicSettings());
-  ipcMain.handle('settings:set', (_e, patch: Partial<Omit<Settings, 'deepgramKeyEncrypted'>>) => {
-    const current = store.store;
-    store.store = { ...current, ...patch };
+  ipcMain.handle('settings:set', (_e, patch: Partial<Settings>) => {
+    store.store = { ...store.store, ...patch };
     return publicSettings();
   });
 
@@ -107,18 +125,43 @@ function registerIpc() {
     store.delete('deepgramKeyEncrypted');
     return true;
   });
+
+  ipcMain.handle('session:start', async (_e, args: StartSessionArgs) => {
+    return meeting.start(args);
+  });
+
+  ipcMain.handle('session:stop', async () => {
+    await meeting.stop();
+  });
+
+  ipcMain.handle('session:get-state', () => meeting.getState());
+
+  ipcMain.on('session:audio', (_e, chunk: ArrayBuffer) => {
+    meeting.sendAudio(chunk);
+  });
+}
+
+function registerDisplayMediaHandler() {
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    // Audio-only system capture: return the primary screen, ask Chromium to mix audio.
+    void desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
+      callback({ video: sources[0], audio: 'loopback' });
+    });
+  });
 }
 
 app.whenReady().then(() => {
+  registerDisplayMediaHandler();
   createWindow();
   createTray();
   registerIpc();
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
   isQuitting = true;
+  await meeting.stop();
 });
 
 app.on('window-all-closed', () => {
-  // Keep running in the tray on Windows/Linux; only macOS traditionally quits.
+  // Keep running in the tray. macOS would traditionally quit, but we hide anyway.
 });
