@@ -9,7 +9,7 @@ export type MCClientOptions = {
   baseUrl: string;
 };
 
-type CreateMeetingResponse = { id: string };
+type CreateMeetingResponse = { id: string; keyterms?: string[] };
 type AskResponse = { questionId: string };
 
 function httpBase(baseUrl: string): string {
@@ -36,7 +36,9 @@ export class MCClient extends EventEmitter {
     this.baseUrl = opts.baseUrl;
   }
 
-  async createMeeting(args: { title: string; platform: string; specialist: Specialist }): Promise<string> {
+  async createMeeting(
+    args: { title: string; platform: string; specialist: Specialist },
+  ): Promise<{ id: string; keyterms: string[] }> {
     const res = await fetch(`${httpBase(this.baseUrl)}/api/meetings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -47,7 +49,7 @@ export class MCClient extends EventEmitter {
       throw new Error(`MC createMeeting failed: HTTP ${res.status}`);
     }
     const body = (await res.json()) as CreateMeetingResponse;
-    return body.id;
+    return { id: body.id, keyterms: body.keyterms ?? [] };
   }
 
   async endMeeting(meetingId: string): Promise<void> {

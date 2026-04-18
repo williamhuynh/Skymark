@@ -65,11 +65,12 @@ export class MeetingSession extends EventEmitter {
     this.setState({ phase: 'connecting' });
     this.wantsActive = true;
     this.apiKey = apiKey;
-    this.keyterms = args.keyterms ?? [];
+    this.keyterms = null; // Set after MC load below (if specialist != 'none').
 
     // Create MC meeting first (so transcripts can stream into it) unless specialist is 'none'.
     let meetingId: string | null = null;
     let mc: MCClient | null = null;
+    let mcKeyterms: string[] = [];
     if (args.specialist !== 'none') {
       const mcUrl = this.store.get('mcUrl') as string | undefined;
       if (!mcUrl) {
@@ -79,11 +80,14 @@ export class MeetingSession extends EventEmitter {
       }
       mc = new MCClient({ baseUrl: mcUrl });
       try {
-        meetingId = await mc.createMeeting({
+        const created = await mc.createMeeting({
           title: args.title ?? `Meeting ${new Date().toISOString()}`,
           platform: args.platform ?? 'skymark',
           specialist: args.specialist,
         });
+        meetingId = created.id;
+        mcKeyterms = created.keyterms;
+        log.info(`[session] loaded ${mcKeyterms.length} keyterms from specialist wiki`);
       } catch (err) {
         this.wantsActive = false;
         this.setState({
@@ -96,6 +100,9 @@ export class MeetingSession extends EventEmitter {
       mc.openStream(meetingId);
       mc.openSubscribe(meetingId);
     }
+
+    // Caller-provided keyterms take precedence (so tests can override).
+    this.keyterms = args.keyterms ?? mcKeyterms;
 
     const client = this.newDeepgramClient();
     try {
