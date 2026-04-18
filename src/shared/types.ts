@@ -30,6 +30,17 @@ export type SessionState =
 
 export type MeetingPlatform = 'teams' | 'meet' | 'skymark';
 
+export type MeetingRow = {
+  id: string;
+  title: string | null;
+  platform: MeetingPlatform | string | null;
+  specialist: Specialist | string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  status: string | null;
+  summary: string | null;
+};
+
 export type StartSessionArgs = {
   specialist: Specialist;
   keyterms?: string[];
@@ -95,5 +106,6 @@ export type SkymarkApi = {
   };
   mc: {
     testConnection: (url: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+    listMeetings: (limit?: number) => Promise<{ ok: true; meetings: MeetingRow[] } | { ok: false; error: string }>;
   };
 };

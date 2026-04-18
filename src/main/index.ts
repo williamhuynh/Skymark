@@ -326,6 +326,32 @@ function registerIpc() {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   });
+
+  ipcMain.handle('mc:list-meetings', async (_e, limit: number = 30) => {
+    const url = store.get('mcUrl') as string | undefined;
+    if (!url) return { ok: false, error: 'MC URL not configured' };
+    try {
+      const res = await fetch(`${url.replace(/\/$/, '')}/api/meetings?limit=${limit}`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = (await res.json()) as any[];
+      const meetings = (Array.isArray(rows) ? rows : []).map((r) => ({
+        id: String(r.id),
+        title: r.title ?? null,
+        platform: r.platform ?? null,
+        specialist: r.specialist ?? null,
+        startedAt: r.started_at ?? r.startedAt ?? null,
+        endedAt: r.ended_at ?? r.endedAt ?? null,
+        status: r.status ?? null,
+        summary: r.summary ?? null,
+      }));
+      return { ok: true, meetings };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
 }
 
 function registerDisplayMediaHandler() {

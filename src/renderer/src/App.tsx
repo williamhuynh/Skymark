@@ -13,8 +13,9 @@ import { TranscriptView } from './TranscriptView';
 import { Onboarding } from './Onboarding';
 import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 import { Logo } from './Logo';
+import { History } from './History';
 
-type Tab = 'meeting' | 'settings';
+type Tab = 'meeting' | 'history' | 'settings';
 
 const MAX_TRANSCRIPT_EVENTS = 500;
 const MAX_FEED_ITEMS = 100;
@@ -251,6 +252,14 @@ export function App() {
           </button>
           <button
             role="tab"
+            aria-selected={tab === 'history'}
+            className={tab === 'history' ? 'tab active' : 'tab'}
+            onClick={() => setTab('history')}
+          >
+            History
+          </button>
+          <button
+            role="tab"
             aria-selected={tab === 'settings'}
             className={tab === 'settings' ? 'tab active' : 'tab'}
             onClick={() => setTab('settings')}
@@ -260,7 +269,9 @@ export function App() {
         </nav>
       </header>
 
-      {tab === 'meeting' ? (
+      {tab === 'history' ? (
+        <History mcUrl={settings.mcUrl} />
+      ) : tab === 'meeting' ? (
         <section className="meeting">
           <div className="meeting-controls">
             <select
