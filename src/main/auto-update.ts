@@ -1,7 +1,12 @@
 import { app, Notification } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import electronUpdater from 'electron-updater';
 import { EventEmitter } from 'node:events';
 import log from 'electron-log/main.js';
+
+// electron-updater is a CJS module with dynamic exports, so Node's ESM loader
+// refuses `import { autoUpdater } from 'electron-updater'` as a named import.
+// Default-import then destructure.
+const { autoUpdater } = electronUpdater;
 import type { UpdateState } from '../shared/types';
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
