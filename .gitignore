@@ -1,0 +1,9 @@
+node_modules
+out
+release
+dist
+.vite
+*.log
+.env
+.env.local
+.DS_Store

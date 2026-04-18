@@ -1,0 +1,20 @@
+appId: dev.sky.skymark
+productName: Skymark
+directories:
+  output: release/${version}
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+  - "!**/.vite"
+  - "!**/*.map"
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: Skymark-${version}-Setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Skymark
