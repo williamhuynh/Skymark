@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TranscriptEvent } from '../../shared/types';
 
 type Props = {
@@ -38,6 +38,7 @@ function speakerColour(speaker: string | null): string {
 export function TranscriptView({ events, interim, compact = false }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
+  const [showJumpLatest, setShowJumpLatest] = useState(false);
 
   useEffect(() => {
     const el = scroller.current;
@@ -52,34 +53,50 @@ export function TranscriptView({ events, interim, compact = false }: Props) {
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     atBottom.current = distanceFromBottom < 40;
+    setShowJumpLatest(!atBottom.current);
+  }
+
+  function jumpToLatest() {
+    const el = scroller.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    atBottom.current = true;
+    setShowJumpLatest(false);
   }
 
   return (
-    <div className="transcript" ref={scroller} onScroll={handleScroll}>
-      {events.length === 0 && !interim && (
-        <p className="transcript-empty">Waiting for audio…</p>
-      )}
-      {events.map((ev) => (
-        <div key={`${ev.startMs}-${ev.speaker ?? 'unk'}-${ev.text.length}`} className="bubble">
-          <div className="bubble-header">
-            <span className="speaker" style={{ color: speakerColour(ev.speaker) }}>
-              {ev.speaker ?? 'Speaker'}
-            </span>
-            {!compact && <span className="timestamp">{formatTimestamp(ev.startMs)}</span>}
+    <div className="transcript-wrap">
+      <div className="transcript" ref={scroller} onScroll={handleScroll}>
+        {events.length === 0 && !interim && (
+          <p className="transcript-empty">Waiting for audio…</p>
+        )}
+        {events.map((ev) => (
+          <div key={`${ev.startMs}-${ev.speaker ?? 'unk'}-${ev.text.length}`} className="bubble">
+            <div className="bubble-header">
+              <span className="speaker" style={{ color: speakerColour(ev.speaker) }}>
+                {ev.speaker ?? 'Speaker'}
+              </span>
+              {!compact && <span className="timestamp">{formatTimestamp(ev.startMs)}</span>}
+            </div>
+            <span className="text">{ev.text}</span>
           </div>
-          <span className="text">{ev.text}</span>
-        </div>
-      ))}
-      {interim && (
-        <div className="bubble interim">
-          <div className="bubble-header">
-            <span className="speaker" style={{ color: speakerColour(interim.speaker) }}>
-              {interim.speaker ?? 'Speaker'}
-            </span>
-            {!compact && <span className="timestamp">{formatTimestamp(interim.startMs)}</span>}
+        ))}
+        {interim && (
+          <div className="bubble interim">
+            <div className="bubble-header">
+              <span className="speaker" style={{ color: speakerColour(interim.speaker) }}>
+                {interim.speaker ?? 'Speaker'}
+              </span>
+              {!compact && <span className="timestamp">{formatTimestamp(interim.startMs)}</span>}
+            </div>
+            <span className="text">{interim.text}</span>
           </div>
-          <span className="text">{interim.text}</span>
-        </div>
+        )}
+      </div>
+      {showJumpLatest && (
+        <button className="jump-latest" onClick={jumpToLatest} aria-label="Scroll to latest">
+          ↓ Latest
+        </button>
       )}
     </div>
   );

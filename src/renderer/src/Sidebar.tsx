@@ -107,10 +107,22 @@ export function Sidebar() {
     sessionState.phase === 'listening' ||
     sessionState.phase === 'connecting' ||
     sessionState.phase === 'reconnecting';
+  const canAsk = sessionState.phase === 'listening';
 
   return (
     <main className="sidebar">
-      <SidebarStatus state={sessionState} />
+      <div className="sidebar-topbar">
+        <SidebarStatus state={sessionState} />
+        <button
+          className="ghost sidebar-open-main"
+          onClick={() => void window.skymark.window.showMain()}
+          title="Focus the main Skymark window"
+          aria-label="Open main window"
+        >
+          ⧉
+        </button>
+      </div>
+
       {!active ? (
         <div className="sidebar-empty">
           <p>No active meeting.</p>
@@ -118,7 +130,7 @@ export function Sidebar() {
         </div>
       ) : (
         <>
-          <TranscriptView events={events} interim={interim} />
+          <TranscriptView events={events} interim={interim} compact />
           <div className="feed sidebar-feed">
             {feed.length === 0 ? (
               <p className="feed-empty">Nudges and answers appear here.</p>
@@ -128,23 +140,26 @@ export function Sidebar() {
                 .map((item) => <FeedCard key={`${item.kind}-${item.id}`} item={item} />)
             )}
           </div>
-          <form
-            className="ask"
-            onSubmit={(e) => { e.preventDefault(); void submitAsk(); }}
-          >
-            <input
-              type="text"
-              placeholder="Ask Sky…"
-              value={askInput}
-              onChange={(e) => setAskInput(e.target.value)}
-            />
-            <button type="submit" disabled={!askInput.trim() || !!askPending}>
-              {askPending ? '…' : 'Ask'}
-            </button>
-          </form>
-          {askError && <p className="status error">{askError}</p>}
         </>
       )}
+
+      <form
+        className="ask"
+        onSubmit={(e) => { e.preventDefault(); void submitAsk(); }}
+      >
+        <input
+          type="text"
+          placeholder={canAsk ? 'Ask Sky…' : 'Start a meeting to ask'}
+          value={askInput}
+          onChange={(e) => setAskInput(e.target.value)}
+          disabled={!canAsk}
+          aria-label="Ask Sky a question"
+        />
+        <button type="submit" disabled={!canAsk || !askInput.trim() || !!askPending}>
+          {askPending ? '…' : 'Ask'}
+        </button>
+      </form>
+      {askError && <p className="status error">{askError}</p>}
     </main>
   );
 }
@@ -176,7 +191,7 @@ function SidebarStatus({ state }: { state: SessionState }) {
   }
   return (
     <div className={`statusbar sidebar-status ${cls}`}>
-      <span className="dot" />
+      <span className="dot" aria-hidden />
       <span>{text}</span>
     </div>
   );
