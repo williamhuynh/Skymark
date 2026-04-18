@@ -12,7 +12,14 @@ import {
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import Store from 'electron-store';
-import type { Settings, SessionState, StartSessionArgs, TranscriptEvent } from '../shared/types';
+import type {
+  Nudge,
+  QuestionAnswer,
+  Settings,
+  SessionState,
+  StartSessionArgs,
+  TranscriptEvent,
+} from '../shared/types';
 import { MeetingSession } from './meeting/session';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -65,6 +72,12 @@ function createWindow() {
   });
   meeting.on('transcript', (ev: TranscriptEvent) => {
     window?.webContents.send('session:transcript', ev);
+  });
+  meeting.on('nudge', (n: Nudge) => {
+    window?.webContents.send('session:nudge', n);
+  });
+  meeting.on('answer', (a: QuestionAnswer) => {
+    window?.webContents.send('session:answer', a);
   });
 }
 
@@ -135,6 +148,10 @@ function registerIpc() {
   });
 
   ipcMain.handle('session:get-state', () => meeting.getState());
+
+  ipcMain.handle('session:ask', async (_e, question: string) => {
+    return meeting.ask(question);
+  });
 
   ipcMain.on('session:audio', (_e, chunk: ArrayBuffer) => {
     meeting.sendAudio(chunk);

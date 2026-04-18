@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Settings, SessionState, TranscriptEvent, Specialist } from '../../shared/types';
+import type {
+  Settings,
+  SessionState,
+  TranscriptEvent,
+  Specialist,
+  Nudge,
+  QuestionAnswer,
+} from '../../shared/types';
 import { startAudioCapture, type AudioCaptureHandle } from './audio/capture';
 import { TranscriptView } from './TranscriptView';
 
 type Tab = 'meeting' | 'settings';
+
+type FeedItem =
+  | { kind: 'nudge'; id: string; at: number; reason: string; text: string }
+  | { kind: 'question'; id: string; at: number; question: string; answer: string };
 
 export function App() {
   const [tab, setTab] = useState<Tab>('meeting');
@@ -16,8 +27,13 @@ export function App() {
   const [events, setEvents] = useState<TranscriptEvent[]>([]);
   const [interim, setInterim] = useState<TranscriptEvent | null>(null);
   const [pickedSpecialist, setPickedSpecialist] = useState<Specialist>('naa-project');
+  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [askInput, setAskInput] = useState('');
+  const [askPending, setAskPending] = useState<string | null>(null);
+  const [askError, setAskError] = useState<string | null>(null);
 
   const captureRef = useRef<AudioCaptureHandle | null>(null);
+  const pendingQuestions = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     void (async () => {
@@ -41,10 +57,39 @@ export function App() {
         setInterim(ev);
       }
     });
+    const offNudge = window.skymark.session.onNudge((n: Nudge) => {
+      setFeed((prev) => [
+        ...prev,
+        {
+          kind: 'nudge',
+          id: n.nudgeId,
+          at: n.resolvedAt ?? Date.now(),
+          reason: n.reason,
+          text: n.nudgeText ?? '',
+        },
+      ]);
+    });
+    const offAnswer = window.skymark.session.onAnswer((a: QuestionAnswer) => {
+      const q = pendingQuestions.current.get(a.questionId) ?? a.question ?? '';
+      pendingQuestions.current.delete(a.questionId);
+      setFeed((prev) => [
+        ...prev,
+        {
+          kind: 'question',
+          id: a.questionId,
+          at: a.answeredAt,
+          question: q,
+          answer: a.answer,
+        },
+      ]);
+      setAskPending((pending) => (pending === a.questionId ? null : pending));
+    });
 
     return () => {
       offState();
       offTranscript();
+      offNudge();
+      offAnswer();
     };
   }, []);
 
@@ -79,6 +124,7 @@ export function App() {
 
     setEvents([]);
     setInterim(null);
+    setFeed([]);
 
     const result = await window.skymark.session.start({ specialist: pickedSpecialist });
     if (!result.ok) {
@@ -111,11 +157,26 @@ export function App() {
     await window.skymark.session.stop();
   }
 
+  async function submitAsk() {
+    const q = askInput.trim();
+    if (!q) return;
+    setAskError(null);
+    const res = await window.skymark.session.ask(q);
+    if (!res.ok) {
+      setAskError(res.error);
+      return;
+    }
+    pendingQuestions.current.set(res.questionId, q);
+    setAskPending(res.questionId);
+    setAskInput('');
+  }
+
   if (!settings) {
     return <main className="app"><p>Loading…</p></main>;
   }
 
   const isActive = sessionState.phase === 'listening' || sessionState.phase === 'connecting';
+  const mcLinked = pickedSpecialist !== 'none';
 
   return (
     <main className="app">
@@ -141,7 +202,7 @@ export function App() {
             >
               <option value="naa-project">naa-project</option>
               <option value="aid-coo">aid-coo</option>
-              <option value="none">none (transcript only)</option>
+              <option value="none">none (transcript only, no MC)</option>
             </select>
             {isActive ? (
               <button className="danger" onClick={stopMeeting}>Stop</button>
@@ -150,9 +211,42 @@ export function App() {
             )}
           </div>
 
-          <StatusBar state={sessionState} />
+          <StatusBar state={sessionState} linked={mcLinked && isActive} />
 
-          <TranscriptView events={events} interim={interim} />
+          <div className="two-col">
+            <TranscriptView events={events} interim={interim} />
+            <aside className="feed">
+              <h3>Nudges & Answers</h3>
+              {feed.length === 0 && (
+                <p className="feed-empty">
+                  {mcLinked
+                    ? 'Sky watches for triggers and answers questions here.'
+                    : 'Pick a specialist to enable MC features.'}
+                </p>
+              )}
+              {feed.map((item) => (
+                <FeedCard key={`${item.kind}-${item.id}`} item={item} />
+              ))}
+            </aside>
+          </div>
+
+          {mcLinked && isActive && (
+            <form
+              className="ask"
+              onSubmit={(e) => { e.preventDefault(); void submitAsk(); }}
+            >
+              <input
+                type="text"
+                placeholder="Ask Sky about what's being discussed…"
+                value={askInput}
+                onChange={(e) => setAskInput(e.target.value)}
+              />
+              <button type="submit" disabled={!askInput.trim() || !!askPending}>
+                {askPending ? 'Thinking…' : 'Ask'}
+              </button>
+            </form>
+          )}
+          {askError && <p className="status error">{askError}</p>}
         </section>
       ) : (
         <section className="settings">
@@ -217,13 +311,38 @@ export function App() {
       )}
 
       <footer>
-        <p className="version">skymark · v0.0.1 · audio pipeline</p>
+        <p className="version">skymark · v0.0.1 · audio + MC</p>
       </footer>
     </main>
   );
 }
 
-function StatusBar({ state }: { state: SessionState }) {
+function FeedCard({ item }: { item: FeedItem }) {
+  const time = new Date(item.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (item.kind === 'nudge') {
+    return (
+      <div className="feed-card nudge">
+        <div className="feed-meta">
+          <span className="feed-tag">Nudge · {item.reason}</span>
+          <span className="feed-time">{time}</span>
+        </div>
+        <p>{item.text}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="feed-card answer">
+      <div className="feed-meta">
+        <span className="feed-tag">Answer</span>
+        <span className="feed-time">{time}</span>
+      </div>
+      <p className="feed-question">Q: {item.question}</p>
+      <p>{item.answer}</p>
+    </div>
+  );
+}
+
+function StatusBar({ state, linked }: { state: SessionState; linked: boolean }) {
   let text = '';
   let cls = '';
   switch (state.phase) {
@@ -248,6 +367,7 @@ function StatusBar({ state }: { state: SessionState }) {
     <div className={`statusbar ${cls}`}>
       <span className="dot" />
       <span>{text}</span>
+      {linked && <span className="link-tag">MC linked</span>}
     </div>
   );
 }
