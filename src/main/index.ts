@@ -26,6 +26,7 @@ import type {
 import { MeetingSession } from './meeting/session';
 import { MeetingDetector } from './detect/meeting-detector';
 import { initLogging, log } from './log';
+import { initAutoUpdate } from './auto-update';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
@@ -371,6 +372,7 @@ function wireSessionBroadcast() {
 
 app.whenReady().then(() => {
   initLogging();
+  initAutoUpdate();
   if (process.platform === 'win32') {
     app.setAppUserModelId('dev.sky.skymark');
   }
