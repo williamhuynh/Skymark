@@ -2,6 +2,9 @@ import { WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
 import type { Nudge, QuestionAnswer, Specialist, TranscriptEvent } from '../../shared/types';
 
+const HTTP_TIMEOUT_MS = 10_000;
+const WS_PING_INTERVAL_MS = 30_000;
+
 export type MCClientOptions = {
   baseUrl: string;
 };
@@ -23,7 +26,9 @@ function wsBase(baseUrl: string): string {
 export class MCClient extends EventEmitter {
   private readonly baseUrl: string;
   private streamWs: WebSocket | null = null;
+  private streamPing: NodeJS.Timeout | null = null;
   private subscribeWs: WebSocket | null = null;
+  private subscribePing: NodeJS.Timeout | null = null;
   private closed = false;
 
   constructor(opts: MCClientOptions) {
@@ -36,6 +41,7 @@ export class MCClient extends EventEmitter {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(args),
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
     });
     if (!res.ok) {
       throw new Error(`MC createMeeting failed: HTTP ${res.status}`);
@@ -45,13 +51,16 @@ export class MCClient extends EventEmitter {
   }
 
   async endMeeting(meetingId: string): Promise<void> {
-    await fetch(`${httpBase(this.baseUrl)}/api/meetings/${meetingId}/end`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}',
-    }).catch(() => {
-      // Best-effort end; server may be unreachable at stop time.
-    });
+    try {
+      await fetch(`${httpBase(this.baseUrl)}/api/meetings/${meetingId}/end`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+        signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+      });
+    } catch (err) {
+      this.emit('error', err);
+    }
   }
 
   async ask(meetingId: string, question: string): Promise<string> {
@@ -59,6 +68,7 @@ export class MCClient extends EventEmitter {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question }),
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
     });
     if (!res.ok) {
       throw new Error(`MC ask failed: HTTP ${res.status}`);
@@ -71,9 +81,24 @@ export class MCClient extends EventEmitter {
     if (this.streamWs) return;
     const ws = new WebSocket(`${wsBase(this.baseUrl)}/ws/meetings/${meetingId}/stream`);
     this.streamWs = ws;
+
+    ws.on('open', () => {
+      this.streamPing = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          try { ws.ping(); } catch { /* ignore */ }
+        }
+      }, WS_PING_INTERVAL_MS);
+    });
     ws.on('error', (err) => this.emit('error', err));
-    ws.on('close', () => {
+    ws.on('close', (code, reason) => {
+      if (this.streamPing) {
+        clearInterval(this.streamPing);
+        this.streamPing = null;
+      }
       if (this.streamWs === ws) this.streamWs = null;
+      if (!this.closed) {
+        this.emit('stream-closed', { code, reason: reason?.toString() ?? '' });
+      }
     });
   }
 
@@ -89,23 +114,36 @@ export class MCClient extends EventEmitter {
     const ws = new WebSocket(`${wsBase(this.baseUrl)}/ws/meetings/${meetingId}/subscribe`);
     this.subscribeWs = ws;
 
+    ws.on('open', () => {
+      this.subscribePing = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          try { ws.ping(); } catch { /* ignore */ }
+        }
+      }, WS_PING_INTERVAL_MS);
+    });
     ws.on('message', (data) => {
       try {
-        const msg = JSON.parse(data.toString());
+        const msg = JSON.parse(data.toString()) as Record<string, unknown>;
         this.handleSubscribeMessage(msg);
       } catch {
         // Ignore non-JSON frames.
       }
     });
     ws.on('error', (err) => this.emit('error', err));
-    ws.on('close', () => {
+    ws.on('close', (code, reason) => {
+      if (this.subscribePing) {
+        clearInterval(this.subscribePing);
+        this.subscribePing = null;
+      }
       if (this.subscribeWs === ws) this.subscribeWs = null;
+      if (!this.closed) {
+        this.emit('subscribe-closed', { code, reason: reason?.toString() ?? '' });
+      }
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private handleSubscribeMessage(msg: any): void {
-    if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return;
+  private handleSubscribeMessage(msg: Record<string, unknown>): void {
+    if (typeof msg.type !== 'string') return;
 
     switch (msg.type) {
       case 'nudge': {
@@ -132,13 +170,14 @@ export class MCClient extends EventEmitter {
         break;
       }
       default:
-        // transcript, status, etc. — ignore; Skymark is the source of those.
         break;
     }
   }
 
   close(): void {
     this.closed = true;
+    if (this.streamPing) { clearInterval(this.streamPing); this.streamPing = null; }
+    if (this.subscribePing) { clearInterval(this.subscribePing); this.subscribePing = null; }
     if (this.streamWs) {
       try { this.streamWs.close(); } catch { /* ignore */ }
       this.streamWs = null;
@@ -147,9 +186,5 @@ export class MCClient extends EventEmitter {
       try { this.subscribeWs.close(); } catch { /* ignore */ }
       this.subscribeWs = null;
     }
-  }
-
-  get isClosed(): boolean {
-    return this.closed;
   }
 }

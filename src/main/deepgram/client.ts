@@ -2,6 +2,9 @@ import { WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
 import type { TranscriptEvent } from '../../shared/types';
 
+const CONNECT_TIMEOUT_MS = 10_000;
+const KEEPALIVE_INTERVAL_MS = 5_000;
+
 export type DeepgramClientOptions = {
   apiKey: string;
   keyterms?: string[];
@@ -34,6 +37,7 @@ export class DeepgramClient extends EventEmitter {
   private readonly apiKey: string;
   private readonly sampleRate: number;
   private readonly keyterms: string[];
+  private keepAliveTimer: NodeJS.Timeout | null = null;
   private closed = false;
 
   constructor(opts: DeepgramClientOptions) {
@@ -66,16 +70,41 @@ export class DeepgramClient extends EventEmitter {
     this.ws = ws;
 
     return new Promise((resolve, reject) => {
-      ws.once('open', () => {
+      let settled = false;
+      const settleOk = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(connectTimeout);
         this.emit('open');
+        this.startKeepAlive();
         resolve();
-      });
-
-      ws.once('error', (err) => {
-        if (this.ws === ws) {
-          this.ws = null;
-        }
+      };
+      const settleErr = (err: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(connectTimeout);
+        if (this.ws === ws) this.ws = null;
         reject(err);
+      };
+
+      const connectTimeout = setTimeout(() => {
+        try {
+          ws.close();
+        } catch {
+          // ignore
+        }
+        settleErr(new Error(`Deepgram connect timed out after ${CONNECT_TIMEOUT_MS}ms`));
+      }, CONNECT_TIMEOUT_MS);
+
+      ws.once('open', settleOk);
+
+      ws.on('error', (err) => {
+        if (!settled) {
+          settleErr(err instanceof Error ? err : new Error(String(err)));
+        } else {
+          // Post-connect error — surface to the session, don't crash the EventEmitter.
+          this.emit('ws-error', err instanceof Error ? err : new Error(String(err)));
+        }
       });
 
       ws.on('message', (data) => {
@@ -87,9 +116,10 @@ export class DeepgramClient extends EventEmitter {
         }
       });
 
-      ws.on('close', () => {
+      ws.on('close', (code, reason) => {
+        this.stopKeepAlive();
         if (this.ws === ws) this.ws = null;
-        this.emit('close');
+        this.emit('close', { code, reason: reason?.toString() ?? '' });
       });
     });
   }
@@ -126,11 +156,31 @@ export class DeepgramClient extends EventEmitter {
     this.ws.send(buf);
   }
 
+  private startKeepAlive(): void {
+    this.stopKeepAlive();
+    this.keepAliveTimer = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        try {
+          this.ws.send(JSON.stringify({ type: 'KeepAlive' }));
+        } catch {
+          // If the send fails, the close handler will clean up.
+        }
+      }
+    }, KEEPALIVE_INTERVAL_MS);
+  }
+
+  private stopKeepAlive(): void {
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
+    }
+  }
+
   async close(): Promise<void> {
     this.closed = true;
+    this.stopKeepAlive();
     if (!this.ws) return;
     try {
-      // Deepgram close-stream message flushes pending results.
       this.ws.send(JSON.stringify({ type: 'CloseStream' }));
     } catch {
       // Socket may already be closed.
