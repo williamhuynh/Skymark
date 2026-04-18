@@ -1,7 +1,7 @@
 import { app, Notification } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { EventEmitter } from 'node:events';
-import log from 'electron-log/main';
+import log from 'electron-log/main.js';
 import type { UpdateState } from '../shared/types';
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours

@@ -1,6 +1,6 @@
 import { WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
-import log from 'electron-log/main';
+import log from 'electron-log/main.js';
 import type { TranscriptEvent } from '../../shared/types';
 
 const CONNECT_TIMEOUT_MS = 10_000;
