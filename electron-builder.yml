@@ -14,7 +14,9 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  artifactName: Skymark-${version}-Setup.${ext}
+    - target: zip
+      arch: [x64]
+  artifactName: Skymark-${version}-${ext}.${ext}
   publisherName: William Huynh
 nsis:
   oneClick: false
