@@ -145,25 +145,30 @@ export class MCClient extends EventEmitter {
   private handleSubscribeMessage(msg: Record<string, unknown>): void {
     if (typeof msg.type !== 'string') return;
 
+    // MC wraps every subscribe-WS payload as { type, event: {...fields} }.
+    // Unwrap to the inner event before reading fields. Fall back to the
+    // top-level object for defensive compatibility in case MC ever changes shape.
+    const ev = ((msg.event as Record<string, unknown>) ?? msg) as Record<string, unknown>;
+
     switch (msg.type) {
       case 'nudge': {
-        if (msg.status !== 'resolved' || !msg.nudgeText) return;
+        if (ev.status !== 'resolved' || !ev.nudgeText) return;
         const nudge: Nudge = {
-          nudgeId: String(msg.nudgeId),
-          reason: String(msg.reason ?? 'unknown'),
-          triggerText: String(msg.triggerText ?? ''),
-          nudgeText: String(msg.nudgeText),
+          nudgeId: String(ev.nudgeId),
+          reason: String(ev.reason ?? 'unknown'),
+          triggerText: String(ev.triggerText ?? ''),
+          nudgeText: String(ev.nudgeText),
           resolvedAt: Date.now(),
         };
         this.emit('nudge', nudge);
         break;
       }
       case 'question': {
-        if (msg.status !== 'answered' || !msg.answer) return;
+        if (ev.status !== 'answered' || !ev.answer) return;
         const ans: QuestionAnswer = {
-          questionId: String(msg.questionId),
-          question: String(msg.question ?? ''),
-          answer: String(msg.answer),
+          questionId: String(ev.questionId),
+          question: String(ev.question ?? ''),
+          answer: String(ev.answer),
           answeredAt: Date.now(),
         };
         this.emit('answer', ans);
