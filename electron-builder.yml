@@ -16,7 +16,6 @@ win:
       arch: [x64]
     - target: zip
       arch: [x64]
-  artifactName: Skymark-${version}-${ext}.${ext}
   publisherName: William Huynh
 nsis:
   oneClick: false
@@ -25,6 +24,7 @@ nsis:
   shortcutName: Skymark
   createDesktopShortcut: true
   createStartMenuShortcut: true
+  artifactName: Skymark-Setup-${version}.${ext}
 publish:
   provider: github
   owner: williamhuynh
