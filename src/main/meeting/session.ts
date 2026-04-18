@@ -3,6 +3,7 @@ import { safeStorage } from 'electron';
 import type Store from 'electron-store';
 import { DeepgramClient } from '../deepgram/client';
 import { MCClient } from '../mc/client';
+import { log } from '../log';
 import type {
   AskResult,
   MeetingInfo,
@@ -86,7 +87,7 @@ export class MeetingSession extends EventEmitter {
       mc.openSubscribe(meetingId);
       mc.on('nudge', (n: Nudge) => this.emit('nudge', n));
       mc.on('answer', (a: QuestionAnswer) => this.emit('answer', a));
-      mc.on('error', (err) => console.warn('[mc] ws error:', err));
+      mc.on('error', (err) => log.warn('[mc] ws error:', err));
     }
 
     // Deepgram WS.

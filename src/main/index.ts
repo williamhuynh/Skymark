@@ -25,6 +25,7 @@ import type {
 } from '../shared/types';
 import { MeetingSession } from './meeting/session';
 import { MeetingDetector } from './detect/meeting-detector';
+import { initLogging, log } from './log';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
@@ -48,7 +49,7 @@ function applyAutostart(enabled: boolean): void {
       openAsHidden: true,
     });
   } catch (err) {
-    console.warn('[autostart] setLoginItemSettings failed:', err);
+    log.warn('[autostart] setLoginItemSettings failed:', err);
   }
 }
 
@@ -269,7 +270,7 @@ function registerIpc() {
       if (err instanceof Error && err.message.startsWith('Deepgram rejected')) {
         throw err;
       }
-      console.warn('[deepgram-key] validation skipped:', err);
+      log.warn('[deepgram-key] validation skipped:', err);
     }
     const encrypted = safeStorage.encryptString(key);
     store.set('deepgramKeyEncrypted', encrypted.toString('base64'));
@@ -322,6 +323,7 @@ function wireSessionBroadcast() {
 }
 
 app.whenReady().then(() => {
+  initLogging();
   if (process.platform === 'win32') {
     app.setAppUserModelId('dev.sky.skymark');
   }
@@ -354,7 +356,7 @@ app.on('before-quit', (event) => {
   detector.stop();
   meeting
     .stop()
-    .catch((err) => console.warn('[shutdown] meeting.stop failed:', err))
+    .catch((err) => log.warn('[shutdown] meeting.stop failed:', err))
     .finally(() => app.exit(0));
 });
 
