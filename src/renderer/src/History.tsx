@@ -136,7 +136,9 @@ export function History({ mcUrl }: { mcUrl: string }) {
                 <button
                   className="ghost"
                   onClick={() =>
-                    window.open(`${mcUrl.replace(/\/$/, '')}/meetings`, '_blank', 'noopener')
+                    void window.skymark.shell.openExternal(
+                      `${mcUrl.replace(/\/$/, '')}/meetings`,
+                    )
                   }
                 >
                   <ExternalLink size={13} />

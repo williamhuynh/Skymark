@@ -1,6 +1,6 @@
 {
   "name": "skymark",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Windows meeting sidecar — system audio capture, Deepgram transcription, streams to Mission Control, whispers specialist-agent context during calls.",
   "author": "William Huynh",
   "license": "UNLICENSED",

@@ -52,6 +52,9 @@ const api: SkymarkApi = {
     toggleSidebar: () => ipcRenderer.invoke('window:toggle-sidebar'),
     showMain: () => ipcRenderer.invoke('window:show-main'),
   },
+  shell: {
+    openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url),
+  },
   mc: {
     testConnection: (url: string) => ipcRenderer.invoke('mc:test-connection', url),
     listMeetings: (limit?: number) => ipcRenderer.invoke('mc:list-meetings', limit),

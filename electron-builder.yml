@@ -9,6 +9,9 @@ files:
   - package.json
   - "!**/.vite"
   - "!**/*.map"
+extraResources:
+  - from: build/icon.png
+    to: icon.png
 asar: true
 win:
   target:

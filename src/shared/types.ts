@@ -112,6 +112,9 @@ export type SkymarkApi = {
     toggleSidebar: () => Promise<void>;
     showMain: () => Promise<void>;
   };
+  shell: {
+    openExternal: (url: string) => Promise<void>;
+  };
   mc: {
     testConnection: (url: string) => Promise<{ ok: true } | { ok: false; error: string }>;
     listMeetings: (limit?: number) => Promise<{ ok: true; meetings: MeetingRow[] } | { ok: false; error: string }>;

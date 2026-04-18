@@ -44,7 +44,7 @@ export function Onboarding({ onKeySaved }: Props) {
               href="https://console.deepgram.com/"
               onClick={(e) => {
                 e.preventDefault();
-                window.open('https://console.deepgram.com/', '_blank', 'noopener');
+                void window.skymark.shell.openExternal('https://console.deepgram.com/');
               }}
             >
               console.deepgram.com <ExternalLink size={11} style={{ verticalAlign: 'text-bottom' }} />

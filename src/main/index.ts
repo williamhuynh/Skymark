@@ -6,6 +6,7 @@ import {
   nativeImage,
   Notification,
   safeStorage,
+  shell,
   ipcMain,
   session,
   desktopCapturer,
@@ -31,6 +32,15 @@ import type { UpdateState } from '../shared/types';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
+
+function resourcePath(name: string): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, name);
+  }
+  return path.join(__dirname, '../../build', name);
+}
+
+const ICON_PATH = resourcePath('icon.png');
 
 type StoreSchema = Settings & { deepgramKeyEncrypted?: string };
 
@@ -127,11 +137,19 @@ function createMainWindow() {
     height: 720,
     show: false,
     title: 'Skymark',
+    icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       sandbox: true,
       contextIsolation: true,
     },
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
   });
 
   mainWindow.on('close', (event) => {
@@ -163,6 +181,7 @@ function createSidebarWindow() {
     x,
     y,
     title: 'Skymark',
+    icon: ICON_PATH,
     alwaysOnTop: true,
     skipTaskbar: false,
     resizable: true,
@@ -173,6 +192,13 @@ function createSidebarWindow() {
       sandbox: true,
       contextIsolation: true,
     },
+  });
+
+  sidebarWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
   });
 
   sidebarWindow.on('closed', () => {
@@ -214,7 +240,14 @@ function broadcast(channel: string, payload: unknown): void {
 }
 
 function createTray() {
-  const icon = nativeImage.createEmpty();
+  let icon = nativeImage.createFromPath(ICON_PATH);
+  if (icon.isEmpty()) {
+    log.warn('[tray] icon.png not found at', ICON_PATH, '— falling back to empty image');
+    icon = nativeImage.createEmpty();
+  } else {
+    // Windows prefers 16x16 / 32x32 tray icons; resize from the 256x256 master.
+    icon = icon.resize({ width: 16, height: 16 });
+  }
   tray = new Tray(icon);
   tray.setToolTip('Skymark');
   tray.setContextMenu(
@@ -313,6 +346,12 @@ function registerIpc() {
     mainWindow.focus();
   });
 
+  ipcMain.handle('shell:open-external', (_e, url: string) => {
+    if (typeof url !== 'string') return;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) return;
+    void shell.openExternal(url);
+  });
+
   ipcMain.handle('mc:test-connection', async (_e, url: string) => {
     if (!url || typeof url !== 'string') {
       return { ok: false, error: 'No URL configured' };
@@ -396,8 +435,24 @@ function wireSessionBroadcast() {
   meeting.on('answer', (a: QuestionAnswer) => broadcast('session:answer', a));
 }
 
+// Single-instance lock: second launches focus the existing window instead of
+// spawning a new process.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+  process.exit(0);
+}
+
+app.on('second-instance', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
+
 app.whenReady().then(() => {
   initLogging();
+  Menu.setApplicationMenu(null);
   updateController.init();
   updateController.on('state', (state: UpdateState) => broadcast('updater:state', state));
   if (process.platform === 'win32') {
