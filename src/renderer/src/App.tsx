@@ -12,6 +12,13 @@ import { TranscriptView } from './TranscriptView';
 
 type Tab = 'meeting' | 'settings';
 
+const MAX_TRANSCRIPT_EVENTS = 500;
+const MAX_FEED_ITEMS = 100;
+
+function capped<T>(arr: T[], max: number): T[] {
+  return arr.length > max ? arr.slice(-max) : arr;
+}
+
 type FeedItem =
   | { kind: 'nudge'; id: string; at: number; reason: string; text: string }
   | { kind: 'question'; id: string; at: number; question: string; answer: string };
@@ -51,37 +58,47 @@ export function App() {
     const offState = window.skymark.session.onState((next) => setSessionState(next));
     const offTranscript = window.skymark.session.onTranscript((ev) => {
       if (ev.isFinal) {
-        setEvents((prev) => [...prev, ev]);
+        setEvents((prev) => capped([...prev, ev], MAX_TRANSCRIPT_EVENTS));
         setInterim(null);
       } else {
         setInterim(ev);
       }
     });
     const offNudge = window.skymark.session.onNudge((n: Nudge) => {
-      setFeed((prev) => [
-        ...prev,
-        {
-          kind: 'nudge',
-          id: n.nudgeId,
-          at: n.resolvedAt ?? Date.now(),
-          reason: n.reason,
-          text: n.nudgeText ?? '',
-        },
-      ]);
+      setFeed((prev) =>
+        capped(
+          [
+            ...prev,
+            {
+              kind: 'nudge',
+              id: n.nudgeId,
+              at: n.resolvedAt ?? Date.now(),
+              reason: n.reason,
+              text: n.nudgeText ?? '',
+            } as FeedItem,
+          ],
+          MAX_FEED_ITEMS,
+        ),
+      );
     });
     const offAnswer = window.skymark.session.onAnswer((a: QuestionAnswer) => {
       const q = pendingQuestions.current.get(a.questionId) ?? a.question ?? '';
       pendingQuestions.current.delete(a.questionId);
-      setFeed((prev) => [
-        ...prev,
-        {
-          kind: 'question',
-          id: a.questionId,
-          at: a.answeredAt,
-          question: q,
-          answer: a.answer,
-        },
-      ]);
+      setFeed((prev) =>
+        capped(
+          [
+            ...prev,
+            {
+              kind: 'question',
+              id: a.questionId,
+              at: a.answeredAt,
+              question: q,
+              answer: a.answer,
+            } as FeedItem,
+          ],
+          MAX_FEED_ITEMS,
+        ),
+      );
       setAskPending((pending) => (pending === a.questionId ? null : pending));
     });
 

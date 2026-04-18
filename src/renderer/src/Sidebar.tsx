@@ -7,6 +7,13 @@ import type {
 } from '../../shared/types';
 import { TranscriptView } from './TranscriptView';
 
+const MAX_TRANSCRIPT_EVENTS = 200;
+const MAX_FEED_ITEMS = 40;
+
+function capped<T>(arr: T[], max: number): T[] {
+  return arr.length > max ? arr.slice(-max) : arr;
+}
+
 type FeedItem =
   | { kind: 'nudge'; id: string; at: number; reason: string; text: string }
   | { kind: 'question'; id: string; at: number; question: string; answer: string };
@@ -28,7 +35,7 @@ export function Sidebar() {
     const offState = window.skymark.session.onState(setSessionState);
     const offTranscript = window.skymark.session.onTranscript((ev) => {
       if (ev.isFinal) {
-        setEvents((prev) => [...prev, ev]);
+        setEvents((prev) => capped([...prev, ev], MAX_TRANSCRIPT_EVENTS));
         setInterim(null);
       } else {
         setInterim(ev);
@@ -37,30 +44,40 @@ export function Sidebar() {
     const offNudge = window.skymark.session.onNudge((n: Nudge) => {
       const text = n.nudgeText;
       if (!text) return;
-      setFeed((prev) => [
-        ...prev,
-        {
-          kind: 'nudge',
-          id: n.nudgeId,
-          at: n.resolvedAt ?? Date.now(),
-          reason: n.reason,
-          text,
-        },
-      ]);
+      setFeed((prev) =>
+        capped(
+          [
+            ...prev,
+            {
+              kind: 'nudge',
+              id: n.nudgeId,
+              at: n.resolvedAt ?? Date.now(),
+              reason: n.reason,
+              text,
+            } as FeedItem,
+          ],
+          MAX_FEED_ITEMS,
+        ),
+      );
     });
     const offAnswer = window.skymark.session.onAnswer((a: QuestionAnswer) => {
       const q = pendingQuestions.current.get(a.questionId) ?? a.question ?? '';
       pendingQuestions.current.delete(a.questionId);
-      setFeed((prev) => [
-        ...prev,
-        {
-          kind: 'question',
-          id: a.questionId,
-          at: a.answeredAt,
-          question: q,
-          answer: a.answer,
-        },
-      ]);
+      setFeed((prev) =>
+        capped(
+          [
+            ...prev,
+            {
+              kind: 'question',
+              id: a.questionId,
+              at: a.answeredAt,
+              question: q,
+              answer: a.answer,
+            } as FeedItem,
+          ],
+          MAX_FEED_ITEMS,
+        ),
+      );
       setAskPending((p) => (p === a.questionId ? null : p));
     });
 
