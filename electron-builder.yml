@@ -16,7 +16,11 @@ win:
       arch: [x64]
     - target: zip
       arch: [x64]
-  publisherName: William Huynh
+  # NOTE: intentionally not setting publisherName. When set, electron-updater
+  # runs a PowerShell signature-verification check on downloaded installers
+  # and fails for unsigned builds. Since we ship unsigned personal
+  # binaries, omitting publisherName tells electron-updater to skip that
+  # check entirely (see NsisUpdater.verifySignature).
 nsis:
   oneClick: false
   perMachine: false
