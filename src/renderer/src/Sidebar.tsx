@@ -103,7 +103,10 @@ export function Sidebar() {
     setAskInput('');
   }
 
-  const active = sessionState.phase === 'listening' || sessionState.phase === 'connecting';
+  const active =
+    sessionState.phase === 'listening' ||
+    sessionState.phase === 'connecting' ||
+    sessionState.phase === 'reconnecting';
 
   return (
     <main className="sidebar">
@@ -161,6 +164,10 @@ function SidebarStatus({ state }: { state: SessionState }) {
     case 'listening':
       text = `Live · ${new Date(state.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
       cls = 'live';
+      break;
+    case 'reconnecting':
+      text = `Reconnecting · ${state.attempt}`;
+      cls = 'connecting';
       break;
     case 'error':
       text = state.message;

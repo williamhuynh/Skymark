@@ -19,6 +19,7 @@ export type SessionState =
   | { phase: 'idle' }
   | { phase: 'connecting' }
   | { phase: 'listening'; startedAt: number }
+  | { phase: 'reconnecting'; source: 'deepgram' | 'mc-stream' | 'mc-subscribe'; attempt: number }
   | { phase: 'error'; message: string };
 
 export type MeetingPlatform = 'teams' | 'meet' | 'skymark';

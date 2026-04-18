@@ -192,7 +192,10 @@ export function App() {
     return <main className="app"><p>Loading…</p></main>;
   }
 
-  const isActive = sessionState.phase === 'listening' || sessionState.phase === 'connecting';
+  const isActive =
+    sessionState.phase === 'listening' ||
+    sessionState.phase === 'connecting' ||
+    sessionState.phase === 'reconnecting';
   const mcLinked = pickedSpecialist !== 'none';
 
   return (
@@ -393,6 +396,10 @@ function StatusBar({ state, linked }: { state: SessionState; linked: boolean }) 
     case 'listening':
       text = `Listening since ${new Date(state.startedAt).toLocaleTimeString()}`;
       cls = 'live';
+      break;
+    case 'reconnecting':
+      text = `Reconnecting ${state.source} (attempt ${state.attempt})…`;
+      cls = 'connecting';
       break;
     case 'error':
       text = `Error: ${state.message}`;
