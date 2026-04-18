@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, Headphones } from 'lucide-react';
+import { ArrowDown, Headphones, Pencil } from 'lucide-react';
 import type { TranscriptEvent } from '../../shared/types';
 
 type Props = {
   events: TranscriptEvent[];
   interim: TranscriptEvent | null;
   compact?: boolean;
+  speakerNames?: Record<string, string>;
+  onRenameSpeaker?: (rawSpeaker: string, name: string) => void;
 };
 
 function formatTimestamp(ms: number): string {
@@ -36,10 +38,17 @@ function speakerColour(speaker: string | null): string {
   return SPEAKER_COLOURS[idx];
 }
 
-export function TranscriptView({ events, interim, compact = false }: Props) {
+function displaySpeaker(raw: string | null, names: Record<string, string> | undefined): string {
+  if (!raw) return 'Speaker';
+  return names?.[raw] ?? raw;
+}
+
+export function TranscriptView({ events, interim, compact = false, speakerNames, onRenameSpeaker }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   const [showJumpLatest, setShowJumpLatest] = useState(false);
+  const [editingRaw, setEditingRaw] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
 
   useEffect(() => {
     const el = scroller.current;
@@ -65,6 +74,56 @@ export function TranscriptView({ events, interim, compact = false }: Props) {
     setShowJumpLatest(false);
   }
 
+  function startEdit(raw: string | null) {
+    if (!raw || !onRenameSpeaker || raw === 'Multiple') return;
+    setEditingRaw(raw);
+    setEditValue(speakerNames?.[raw] ?? '');
+  }
+
+  function commitEdit() {
+    if (!editingRaw || !onRenameSpeaker) return;
+    const trimmed = editValue.trim();
+    onRenameSpeaker(editingRaw, trimmed);
+    setEditingRaw(null);
+  }
+
+  function cancelEdit() {
+    setEditingRaw(null);
+  }
+
+  function renderSpeakerLabel(raw: string | null, isInterim: boolean) {
+    const display = displaySpeaker(raw, speakerNames);
+    const editable = !!onRenameSpeaker && !!raw && raw !== 'Multiple' && !isInterim;
+    if (editingRaw === raw && !isInterim) {
+      return (
+        <input
+          className="speaker-edit"
+          value={editValue}
+          autoFocus
+          placeholder={raw ?? ''}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitEdit();
+            else if (e.key === 'Escape') cancelEdit();
+          }}
+          style={{ color: speakerColour(raw) }}
+        />
+      );
+    }
+    return (
+      <span
+        className={editable ? 'speaker speaker-editable' : 'speaker'}
+        style={{ color: speakerColour(raw) }}
+        onClick={editable ? () => startEdit(raw) : undefined}
+        title={editable ? 'Click to rename this speaker for this meeting' : undefined}
+      >
+        {display}
+        {editable && <Pencil size={10} className="speaker-edit-icon" aria-hidden />}
+      </span>
+    );
+  }
+
   return (
     <div className="transcript-wrap">
       <div className="transcript" ref={scroller} onScroll={handleScroll}>
@@ -77,9 +136,7 @@ export function TranscriptView({ events, interim, compact = false }: Props) {
         {events.map((ev) => (
           <div key={`${ev.startMs}-${ev.speaker ?? 'unk'}-${ev.text.length}`} className="bubble">
             <div className="bubble-header">
-              <span className="speaker" style={{ color: speakerColour(ev.speaker) }}>
-                {ev.speaker ?? 'Speaker'}
-              </span>
+              {renderSpeakerLabel(ev.speaker, false)}
               {!compact && <span className="timestamp">{formatTimestamp(ev.startMs)}</span>}
             </div>
             <span className="text">{ev.text}</span>
@@ -88,9 +145,7 @@ export function TranscriptView({ events, interim, compact = false }: Props) {
         {interim && (
           <div className="bubble interim">
             <div className="bubble-header">
-              <span className="speaker" style={{ color: speakerColour(interim.speaker) }}>
-                {interim.speaker ?? 'Speaker'}
-              </span>
+              {renderSpeakerLabel(interim.speaker, true)}
               {!compact && <span className="timestamp">{formatTimestamp(interim.startMs)}</span>}
             </div>
             <span className="text">{interim.text}</span>

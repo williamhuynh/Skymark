@@ -119,6 +119,8 @@ export type SkymarkApi = {
     testConnection: (url: string) => Promise<{ ok: true } | { ok: false; error: string }>;
     listMeetings: (limit?: number) => Promise<{ ok: true; meetings: MeetingRow[] } | { ok: false; error: string }>;
     getArchive: (meetingId: string) => Promise<{ ok: true; markdown: string } | { ok: false; error: string }>;
+    patchMetadata: (meetingId: string, patch: Record<string, unknown>) =>
+      Promise<{ ok: true } | { ok: false; error: string }>;
   };
   updater: {
     getVersion: () => Promise<string>;

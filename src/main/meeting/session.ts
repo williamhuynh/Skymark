@@ -67,38 +67,46 @@ export class MeetingSession extends EventEmitter {
     this.apiKey = apiKey;
     this.keyterms = null; // Set after MC load below (if specialist != 'none').
 
-    // Create MC meeting first (so transcripts can stream into it) unless specialist is 'none'.
-    let meetingId: string | null = null;
-    let mc: MCClient | null = null;
+    // Always create an MC meeting so the transcript is persisted, even for
+    // 'none' specialist. Subscribe WS + specialist-wake plumbing is only
+    // wired up when a specialist is selected.
+    const mcUrl = this.store.get('mcUrl') as string | undefined;
+    if (!mcUrl) {
+      this.wantsActive = false;
+      this.setState({ phase: 'error', message: 'MC URL not configured' });
+      return { ok: false, error: 'MC URL not configured' };
+    }
+    const mc = new MCClient({ baseUrl: mcUrl });
+    let meetingId: string;
     let mcKeyterms: string[] = [];
-    if (args.specialist !== 'none') {
-      const mcUrl = this.store.get('mcUrl') as string | undefined;
-      if (!mcUrl) {
-        this.wantsActive = false;
-        this.setState({ phase: 'error', message: 'MC URL not configured' });
-        return { ok: false, error: 'MC URL not configured' };
-      }
-      mc = new MCClient({ baseUrl: mcUrl });
-      try {
-        const created = await mc.createMeeting({
-          title: args.title ?? `Meeting ${new Date().toISOString()}`,
-          platform: args.platform ?? 'skymark',
-          specialist: args.specialist,
-        });
-        meetingId = created.id;
-        mcKeyterms = created.keyterms;
+    try {
+      const created = await mc.createMeeting({
+        title: args.title ?? `Meeting ${new Date().toISOString()}`,
+        platform: args.platform ?? 'skymark',
+        specialist: args.specialist,
+      });
+      meetingId = created.id;
+      mcKeyterms = created.keyterms;
+      if (mcKeyterms.length > 0) {
         log.info(`[session] loaded ${mcKeyterms.length} keyterms from specialist wiki`);
-      } catch (err) {
-        this.wantsActive = false;
-        this.setState({
-          phase: 'error',
-          message: 'MC createMeeting failed: ' + (err instanceof Error ? err.message : String(err)),
-        });
-        return { ok: false, error: this.state.phase === 'error' ? this.state.message : 'createMeeting failed' };
       }
+    } catch (err) {
+      this.wantsActive = false;
+      mc.close();
+      this.setState({
+        phase: 'error',
+        message: 'MC createMeeting failed: ' + (err instanceof Error ? err.message : String(err)),
+      });
+      return { ok: false, error: this.state.phase === 'error' ? this.state.message : 'createMeeting failed' };
+    }
+
+    mc.openStream(meetingId);
+    if (args.specialist !== 'none') {
       this.wireMC(mc, meetingId);
-      mc.openStream(meetingId);
       mc.openSubscribe(meetingId);
+    } else {
+      // Still wire error logs, but don't listen for nudges/answers (none coming).
+      mc.on('error', (err) => log.warn('[mc] error:', err));
     }
 
     // Caller-provided keyterms take precedence (so tests can override).
@@ -122,10 +130,7 @@ export class MeetingSession extends EventEmitter {
 
     this.deepgram = client;
     this.mc = mc;
-    this.meeting =
-      meetingId && args.specialist !== 'none'
-        ? { id: meetingId, specialist: args.specialist, startedAt: Date.now() }
-        : null;
+    this.meeting = { id: meetingId, specialist: args.specialist, startedAt: Date.now() };
     this.setState({ phase: 'listening', startedAt: Date.now() });
     return { ok: true, meeting: this.meeting ?? undefined };
   }
@@ -247,7 +252,10 @@ export class MeetingSession extends EventEmitter {
 
   async ask(question: string): Promise<AskResult> {
     if (!this.mc || !this.meeting) {
-      return { ok: false, error: 'Ask requires an active MC meeting (specialist must not be "none")' };
+      return { ok: false, error: 'Ask requires an active MC meeting' };
+    }
+    if (this.meeting.specialist === 'none') {
+      return { ok: false, error: 'Pick a specialist to ask questions (transcript-only meetings have no one to answer)' };
     }
     try {
       const questionId = await this.mc.ask(this.meeting.id, question);

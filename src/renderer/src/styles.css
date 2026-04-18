@@ -398,6 +398,39 @@ footer {
   font-size: var(--size-xs);
   font-weight: 600;
   letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.speaker-editable {
+  cursor: pointer;
+  transition: opacity var(--t-fast) var(--ease);
+}
+
+.speaker-editable:hover {
+  opacity: 0.75;
+}
+
+.speaker-edit-icon {
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+}
+
+.speaker-editable:hover .speaker-edit-icon {
+  opacity: 0.6;
+}
+
+.speaker-edit {
+  font-size: var(--size-xs);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0 4px;
+  background: var(--bg-surface-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  min-width: 120px;
 }
 
 .bubble .timestamp {
@@ -549,6 +582,49 @@ footer {
   color: var(--text-dim);
   font-size: var(--size-xs);
   text-align: right;
+}
+
+.meeting-notes {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-surface-1);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.meeting-notes summary {
+  cursor: pointer;
+  font-size: var(--size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.notes-hint {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: var(--size-xs);
+}
+
+.meeting-notes-input {
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: var(--size-base);
+  resize: vertical;
+  min-height: 80px;
+  transition: border-color var(--t-fast) var(--ease);
+}
+
+.meeting-notes-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
 /* ============================================================ */

@@ -396,6 +396,27 @@ function registerIpc() {
   ipcMain.handle('updater:check', () => updateController.check('manual'));
   ipcMain.handle('updater:install', () => updateController.install());
 
+  ipcMain.handle(
+    'mc:patch-metadata',
+    async (_e, meetingId: string, patch: Record<string, unknown>) => {
+      const url = store.get('mcUrl') as string | undefined;
+      if (!url) return { ok: false, error: 'MC URL not configured' };
+      if (!meetingId) return { ok: false, error: 'meetingId required' };
+      try {
+        const res = await fetch(`${url.replace(/\/$/, '')}/api/meetings/${meetingId}/metadata`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
+
   ipcMain.handle('mc:get-archive', async (_e, meetingId: string) => {
     const url = store.get('mcUrl') as string | undefined;
     if (!url) return { ok: false, error: 'MC URL not configured' };

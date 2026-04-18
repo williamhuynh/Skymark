@@ -61,6 +61,14 @@ export function App() {
   const captureRef = useRef<AudioCaptureHandle | null>(null);
   const pendingQuestions = useRef<Map<string, string>>(new Map());
 
+  const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
+  const [meetingNotes, setMeetingNotes] = useState<string>('');
+  const activeMeetingIdRef = useRef<string | null>(null);
+
+  const saveNotes = useDebouncedCallback((value: string, meetingId: string) => {
+    void window.skymark.mc.patchMetadata(meetingId, { notes: value });
+  }, 700);
+
   const [mcUrlDraft, setMcUrlDraft] = useState<string>('');
   const [savedField, setSavedField] = useState<string | null>(null);
   const [mcTest, setMcTest] = useState<'idle' | 'testing' | 'ok' | string>('idle');
@@ -212,6 +220,9 @@ export function App() {
       setSessionState({ phase: 'error', message: result.error });
       return;
     }
+    activeMeetingIdRef.current = result.meeting?.id ?? null;
+    setSpeakerNames({});
+    setMeetingNotes('');
 
     try {
       const handle = await startAudioCapture({
@@ -231,11 +242,36 @@ export function App() {
   }
 
   async function stopMeeting() {
+    // Flush any pending notes before tearing down.
+    const meetingId = activeMeetingIdRef.current;
+    if (meetingId && meetingNotes) {
+      await window.skymark.mc.patchMetadata(meetingId, { notes: meetingNotes });
+    }
     if (captureRef.current) {
       await captureRef.current.stop();
       captureRef.current = null;
     }
     await window.skymark.session.stop();
+    activeMeetingIdRef.current = null;
+  }
+
+  function renameSpeaker(rawSpeaker: string, name: string) {
+    setSpeakerNames((prev) => {
+      const next = { ...prev };
+      if (name) {
+        next[rawSpeaker] = name;
+      } else {
+        delete next[rawSpeaker];
+      }
+      return next;
+    });
+    const meetingId = activeMeetingIdRef.current;
+    if (meetingId) {
+      const nextMap = { ...speakerNames };
+      if (name) nextMap[rawSpeaker] = name;
+      else delete nextMap[rawSpeaker];
+      void window.skymark.mc.patchMetadata(meetingId, { speakerNames: nextMap });
+    }
   }
 
   async function submitAsk() {
@@ -355,7 +391,12 @@ export function App() {
           <StatusBar state={sessionState} linked={mcLinked && isActive} />
 
           <div className="two-col">
-            <TranscriptView events={events} interim={interim} />
+            <TranscriptView
+              events={events}
+              interim={interim}
+              speakerNames={speakerNames}
+              onRenameSpeaker={renameSpeaker}
+            />
             <aside className="feed">
               <h3>Nudges & Answers</h3>
               {feed.length === 0 && (
@@ -370,6 +411,26 @@ export function App() {
               ))}
             </aside>
           </div>
+
+          {isActive && (
+            <details className="meeting-notes" open>
+              <summary>
+                Notes <span className="notes-hint">— typed during the meeting, saved with the archive</span>
+              </summary>
+              <textarea
+                className="meeting-notes-input"
+                value={meetingNotes}
+                onChange={(e) => {
+                  setMeetingNotes(e.target.value);
+                  if (activeMeetingIdRef.current) {
+                    saveNotes(e.target.value, activeMeetingIdRef.current);
+                  }
+                }}
+                placeholder="Your live notes. Specialist reads these alongside the transcript for the post-meeting summary."
+                rows={4}
+              />
+            </details>
+          )}
 
           {mcLinked && isActive && (
             <>
