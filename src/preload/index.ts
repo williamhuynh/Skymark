@@ -6,6 +6,7 @@ import type {
   Settings,
   SessionState,
   SkymarkApi,
+  Specialist,
   StartSessionArgs,
   TranscriptEvent,
   UpdateState,
@@ -61,6 +62,8 @@ const api: SkymarkApi = {
     getArchive: (meetingId: string) => ipcRenderer.invoke('mc:get-archive', meetingId),
     patchMetadata: (meetingId: string, patch: Record<string, unknown>) =>
       ipcRenderer.invoke('mc:patch-metadata', meetingId, patch),
+    requestBrief: (args: { specialist: Specialist; title?: string }) =>
+      ipcRenderer.invoke('mc:request-brief', args),
   },
   updater: {
     getVersion: () => ipcRenderer.invoke('updater:get-version'),

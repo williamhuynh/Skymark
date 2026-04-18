@@ -121,6 +121,8 @@ export type SkymarkApi = {
     getArchive: (meetingId: string) => Promise<{ ok: true; markdown: string } | { ok: false; error: string }>;
     patchMetadata: (meetingId: string, patch: Record<string, unknown>) =>
       Promise<{ ok: true } | { ok: false; error: string }>;
+    requestBrief: (args: { specialist: Specialist; title?: string }) =>
+      Promise<{ ok: true; brief: string } | { ok: false; error: string }>;
   };
   updater: {
     getVersion: () => Promise<string>;

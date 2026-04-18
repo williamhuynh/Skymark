@@ -397,6 +397,78 @@ function registerIpc() {
   ipcMain.handle('updater:install', () => updateController.install());
 
   ipcMain.handle(
+    'mc:request-brief',
+    async (_e, args: { specialist: string; title?: string }) => {
+      const url = store.get('mcUrl') as string | undefined;
+      if (!url) return { ok: false, error: 'MC URL not configured' };
+      if (!args.specialist || args.specialist === 'none') {
+        return { ok: false, error: 'Pick a specialist to get a briefing' };
+      }
+      const base = url.replace(/\/$/, '');
+      const upcomingTitle = args.title?.trim() || 'an upcoming meeting';
+      try {
+        // 1. Create an ephemeral briefing meeting.
+        const createRes = await fetch(`${base}/api/meetings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: `Briefing: ${upcomingTitle}`,
+            platform: 'skymark-brief',
+            specialist: args.specialist,
+            metadata: { ephemeral: true },
+          }),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!createRes.ok) return { ok: false, error: `createMeeting HTTP ${createRes.status}` };
+        const { id: meetingId } = (await createRes.json()) as { id: string };
+
+        // 2. Ask a briefing question.
+        const askRes = await fetch(`${base}/api/meetings/${meetingId}/ask`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question:
+              `Please give me a short briefing for ${upcomingTitle}. ` +
+              `Pull from your wiki: recent meetings, key entities, outstanding decisions or actions. ` +
+              `Focus on what would be useful to know going in. Keep it to ~6–8 bullet points max, no preamble.`,
+          }),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!askRes.ok) {
+          await fetch(`${base}/api/meetings/${meetingId}/end`, { method: 'POST', body: '{}' }).catch(() => undefined);
+          return { ok: false, error: `ask HTTP ${askRes.status}` };
+        }
+        const { questionId } = (await askRes.json()) as { questionId: string };
+
+        // 3. Poll until the specialist answers (max 60s).
+        const deadline = Date.now() + 60_000;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 1500));
+          const qRes = await fetch(
+            `${base}/api/meetings/${meetingId}/questions/${questionId}`,
+            { signal: AbortSignal.timeout(5000) },
+          );
+          if (!qRes.ok) continue;
+          const q = (await qRes.json()) as { status: string; answer: string | null };
+          if (q.status === 'answered' && q.answer) {
+            // 4. Close the ephemeral meeting (skips post-meeting delegate).
+            await fetch(`${base}/api/meetings/${meetingId}/end`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: '{}',
+            }).catch(() => undefined);
+            return { ok: true, brief: q.answer };
+          }
+        }
+        await fetch(`${base}/api/meetings/${meetingId}/end`, { method: 'POST', body: '{}' }).catch(() => undefined);
+        return { ok: false, error: 'Briefing timed out after 60s' };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
+
+  ipcMain.handle(
     'mc:patch-metadata',
     async (_e, meetingId: string, patch: Record<string, unknown>) => {
       const url = store.get('mcUrl') as string | undefined;

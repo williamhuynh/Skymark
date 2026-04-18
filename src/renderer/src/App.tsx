@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   Download,
   RefreshCw,
+  Lightbulb,
 } from 'lucide-react';
 import type { UpdateState } from '../../shared/types';
 
@@ -63,6 +64,9 @@ export function App() {
 
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
   const [meetingNotes, setMeetingNotes] = useState<string>('');
+  const [brief, setBrief] = useState<string | null>(null);
+  const [briefStatus, setBriefStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [briefError, setBriefError] = useState<string | null>(null);
   const activeMeetingIdRef = useRef<string | null>(null);
 
   const saveNotes = useDebouncedCallback((value: string, meetingId: string) => {
@@ -274,6 +278,24 @@ export function App() {
     }
   }
 
+  async function requestBrief() {
+    if (pickedSpecialist === 'none') return;
+    setBriefStatus('loading');
+    setBriefError(null);
+    setBrief(null);
+    const res = await window.skymark.mc.requestBrief({
+      specialist: pickedSpecialist,
+      title: meetingTitle,
+    });
+    if (res.ok) {
+      setBrief(res.brief);
+      setBriefStatus('idle');
+    } else {
+      setBriefError(res.error);
+      setBriefStatus('error');
+    }
+  }
+
   async function submitAsk() {
     const q = askInput.trim();
     if (!q) return;
@@ -386,7 +408,39 @@ export function App() {
               <PanelRight size={14} />
               <span>Sidebar</span>
             </button>
+            {!isActive && pickedSpecialist !== 'none' && (
+              <button
+                className="ghost"
+                onClick={() => void requestBrief()}
+                disabled={briefStatus === 'loading'}
+                title="Ask the specialist to prepare context for this meeting"
+              >
+                <Lightbulb size={14} />
+                <span>{briefStatus === 'loading' ? 'Briefing…' : 'Brief me'}</span>
+              </button>
+            )}
           </div>
+
+          {(brief || briefStatus === 'error') && (
+            <div className={briefStatus === 'error' ? 'brief-panel error' : 'brief-panel'}>
+              <div className="brief-header">
+                <Lightbulb size={13} />
+                <span>Pre-meeting briefing</span>
+                <button
+                  className="ghost brief-dismiss"
+                  onClick={() => {
+                    setBrief(null);
+                    setBriefError(null);
+                    setBriefStatus('idle');
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+              {brief && <div className="brief-body">{brief}</div>}
+              {briefError && <p className="status error">{briefError}</p>}
+            </div>
+          )}
 
           <StatusBar state={sessionState} linked={mcLinked && isActive} />
 
