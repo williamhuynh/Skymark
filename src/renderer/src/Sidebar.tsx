@@ -6,6 +6,12 @@ import type {
   TranscriptEvent,
 } from '../../shared/types';
 import { TranscriptView } from './TranscriptView';
+import {
+  Maximize2,
+  Send,
+  Sparkles,
+  MessageSquareQuote,
+} from 'lucide-react';
 
 const MAX_TRANSCRIPT_EVENTS = 200;
 const MAX_FEED_ITEMS = 40;
@@ -119,7 +125,7 @@ export function Sidebar() {
           title="Focus the main Skymark window"
           aria-label="Open main window"
         >
-          ⧉
+          <Maximize2 size={14} />
         </button>
       </div>
 
@@ -155,8 +161,8 @@ export function Sidebar() {
           disabled={!canAsk}
           aria-label="Ask Sky a question"
         />
-        <button type="submit" disabled={!canAsk || !askInput.trim() || !!askPending}>
-          {askPending ? '…' : 'Ask'}
+        <button type="submit" disabled={!canAsk || !askInput.trim() || !!askPending} aria-label="Send question">
+          {askPending ? '…' : <Send size={14} />}
         </button>
       </form>
       {askError && <p className="status error">{askError}</p>}
@@ -203,7 +209,9 @@ function FeedCard({ item }: { item: FeedItem }) {
     return (
       <div className="feed-card nudge">
         <div className="feed-meta">
-          <span className="feed-tag">Nudge</span>
+          <span className="feed-tag">
+            <Sparkles size={11} /> Nudge
+          </span>
           <span className="feed-time">{time}</span>
         </div>
         <p>{item.text}</p>
@@ -213,7 +221,9 @@ function FeedCard({ item }: { item: FeedItem }) {
   return (
     <div className="feed-card answer">
       <div className="feed-meta">
-        <span className="feed-tag">Answer</span>
+        <span className="feed-tag">
+          <MessageSquareQuote size={11} /> Answer
+        </span>
         <span className="feed-time">{time}</span>
       </div>
       <p className="feed-question">Q: {item.question}</p>

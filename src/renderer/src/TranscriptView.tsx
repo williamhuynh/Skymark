@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ArrowDown, Headphones } from 'lucide-react';
 import type { TranscriptEvent } from '../../shared/types';
 
 type Props = {
@@ -68,7 +69,10 @@ export function TranscriptView({ events, interim, compact = false }: Props) {
     <div className="transcript-wrap">
       <div className="transcript" ref={scroller} onScroll={handleScroll}>
         {events.length === 0 && !interim && (
-          <p className="transcript-empty">Waiting for audio…</p>
+          <div className="transcript-empty">
+            <Headphones size={24} strokeWidth={1.5} />
+            <span>Waiting for audio…</span>
+          </div>
         )}
         {events.map((ev) => (
           <div key={`${ev.startMs}-${ev.speaker ?? 'unk'}-${ev.text.length}`} className="bubble">
@@ -95,7 +99,8 @@ export function TranscriptView({ events, interim, compact = false }: Props) {
       </div>
       {showJumpLatest && (
         <button className="jump-latest" onClick={jumpToLatest} aria-label="Scroll to latest">
-          ↓ Latest
+          <ArrowDown size={14} />
+          <span>Latest</span>
         </button>
       )}
     </div>

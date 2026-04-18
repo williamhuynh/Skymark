@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { RefreshCw, ExternalLink, History as HistoryIcon } from 'lucide-react';
 import type { MeetingRow, Specialist } from '../../shared/types';
 import { SPECIALIST_LABELS } from '../../shared/types';
 
@@ -73,7 +74,8 @@ export function History({ mcUrl }: { mcUrl: string }) {
       <div className="history-toolbar">
         <h2>Past meetings</h2>
         <button className="ghost" onClick={() => void load()} disabled={status === 'loading'}>
-          {status === 'loading' ? 'Loading…' : 'Refresh'}
+          <RefreshCw size={13} className={status === 'loading' ? 'spinning' : ''} />
+          <span>{status === 'loading' ? 'Loading…' : 'Refresh'}</span>
         </button>
       </div>
 
@@ -88,7 +90,10 @@ export function History({ mcUrl }: { mcUrl: string }) {
         <div className="history-layout">
           <ol className="history-list">
             {meetings.length === 0 && status !== 'loading' && (
-              <p className="feed-empty">No meetings yet. Start one from the Meeting tab.</p>
+              <div className="feed-empty">
+                <HistoryIcon size={20} strokeWidth={1.5} />
+                <span>No meetings yet. Start one from the Meeting tab.</span>
+              </div>
             )}
             {meetings.map((m) => (
               <li
@@ -134,7 +139,8 @@ export function History({ mcUrl }: { mcUrl: string }) {
                     window.open(`${mcUrl.replace(/\/$/, '')}/meetings`, '_blank', 'noopener')
                   }
                 >
-                  Open in Mission Control
+                  <ExternalLink size={13} />
+                  <span>Open in Mission Control</span>
                 </button>
               </>
             ) : (

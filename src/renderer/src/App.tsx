@@ -14,6 +14,16 @@ import { Onboarding } from './Onboarding';
 import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 import { Logo } from './Logo';
 import { History } from './History';
+import {
+  Play,
+  Square,
+  PanelRight,
+  CircleAlert,
+  MessageSquareQuote,
+  Sparkles,
+  Clock,
+  CheckCircle2,
+} from 'lucide-react';
 
 type Tab = 'meeting' | 'history' | 'settings';
 
@@ -285,16 +295,24 @@ export function App() {
               <option value="none">{SPECIALIST_LABELS['none']}</option>
             </select>
             {isActive ? (
-              <button className="danger" onClick={stopMeeting}>Stop</button>
+              <button className="danger" onClick={stopMeeting}>
+                <Square size={14} strokeWidth={2.5} fill="currentColor" />
+                <span>Stop</span>
+              </button>
             ) : (
-              <button onClick={startMeeting}>Start</button>
+              <button onClick={startMeeting}>
+                <Play size={14} strokeWidth={2.5} fill="currentColor" />
+                <span>Start</span>
+              </button>
             )}
             <button
               className="ghost"
               onClick={() => void window.skymark.window.toggleSidebar()}
               title="Open the always-on-top sidebar"
+              aria-label="Toggle sidebar"
             >
-              Sidebar
+              <PanelRight size={14} />
+              <span>Sidebar</span>
             </button>
           </div>
 
@@ -453,7 +471,9 @@ function FeedCard({ item }: { item: FeedItem }) {
     return (
       <div className="feed-card nudge">
         <div className="feed-meta">
-          <span className="feed-tag">Nudge · {item.reason}</span>
+          <span className="feed-tag">
+            <Sparkles size={12} /> Nudge · {item.reason}
+          </span>
           <span className="feed-time">{time}</span>
         </div>
         <p>{item.text}</p>
@@ -463,7 +483,9 @@ function FeedCard({ item }: { item: FeedItem }) {
   return (
     <div className="feed-card answer">
       <div className="feed-meta">
-        <span className="feed-tag">Answer</span>
+        <span className="feed-tag">
+          <MessageSquareQuote size={12} /> Answer
+        </span>
         <span className="feed-time">{time}</span>
       </div>
       <p className="feed-question">Q: {item.question}</p>
@@ -497,9 +519,20 @@ function StatusBar({ state, linked }: { state: SessionState; linked: boolean }) 
       cls = 'error';
       break;
   }
+  const Icon =
+    state.phase === 'error'
+      ? CircleAlert
+      : state.phase === 'listening'
+      ? CheckCircle2
+      : Clock;
+
   return (
     <div className={`statusbar ${cls}`} role="status">
-      <span className="dot" aria-hidden />
+      {state.phase === 'error' || state.phase === 'listening' ? (
+        <Icon size={14} className="statusbar-icon" aria-hidden />
+      ) : (
+        <span className="dot" aria-hidden />
+      )}
       <span>{text}</span>
       {linked && <span className="link-tag">MC linked</span>}
     </div>

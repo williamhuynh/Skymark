@@ -1005,3 +1005,21 @@ button:disabled {
   justify-content: center;
   color: currentColor;
 }
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.feed-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.statusbar-icon {
+  flex: 0 0 auto;
+}
