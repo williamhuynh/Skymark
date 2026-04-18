@@ -250,9 +250,26 @@ function registerIpc() {
     return publicSettings();
   });
 
-  ipcMain.handle('deepgram-key:set', (_e, key: string) => {
+  ipcMain.handle('deepgram-key:set', async (_e, key: string) => {
     if (!safeStorage.isEncryptionAvailable()) {
       throw new Error('OS-level encryption unavailable — cannot store Deepgram key securely');
+    }
+    // Validate against Deepgram before storing. 401 is a hard fail.
+    // Other errors (network, 5xx) surface a warning but we still save —
+    // the user might be offline and we don't want to block them.
+    try {
+      const res = await fetch('https://api.deepgram.com/v1/projects', {
+        headers: { Authorization: `Token ${key}` },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (res.status === 401) {
+        throw new Error('Deepgram rejected this key (401). Check it and try again.');
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('Deepgram rejected')) {
+        throw err;
+      }
+      console.warn('[deepgram-key] validation skipped:', err);
     }
     const encrypted = safeStorage.encryptString(key);
     store.set('deepgramKeyEncrypted', encrypted.toString('base64'));
