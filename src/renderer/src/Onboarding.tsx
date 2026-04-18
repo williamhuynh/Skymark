@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { ExternalLink } from 'lucide-react';
+import { Logo } from './Logo';
 
 type Props = {
   onKeySaved: () => void;
@@ -26,10 +28,13 @@ export function Onboarding({ onKeySaved }: Props) {
   return (
     <section className="onboarding">
       <div className="onboarding-card">
-        <h2>Welcome to Skymark</h2>
+        <div className="onboarding-header">
+          <Logo size={32} />
+          <h2>Welcome to Skymark</h2>
+        </div>
         <p className="onboarding-lead">
-          Skymark streams your meeting audio to Deepgram for transcription, then whispers
-          context from your specialist agents (naa-project, aid-coo) during calls.
+          A meeting sidecar that streams audio to Deepgram for transcription and lets Sky's
+          specialist agents whisper context to you during live calls.
         </p>
 
         <ol className="onboarding-steps">
@@ -42,14 +47,13 @@ export function Onboarding({ onKeySaved }: Props) {
                 window.open('https://console.deepgram.com/', '_blank', 'noopener');
               }}
             >
-              console.deepgram.com
-            </a>{' '}
-            (free tier is fine; ~$200 prepaid covers months of real use).
+              console.deepgram.com <ExternalLink size={11} style={{ verticalAlign: 'text-bottom' }} />
+            </a>
+            . Free tier is fine; ~$200 prepaid covers months.
           </li>
-          <li>Paste it below. We validate it with Deepgram before saving.</li>
+          <li>Paste it below — we validate against Deepgram before storing.</li>
           <li>
-            Once saved, it's encrypted in Windows Credential Manager — never written to disk in
-            plaintext, never sent anywhere except Deepgram.
+            The key is encrypted in Windows Credential Manager, never in plaintext on disk.
           </li>
         </ol>
 
