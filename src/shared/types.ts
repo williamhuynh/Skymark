@@ -21,10 +21,19 @@ export type SessionState =
   | { phase: 'listening'; startedAt: number }
   | { phase: 'error'; message: string };
 
+export type MeetingPlatform = 'teams' | 'meet' | 'skymark';
+
 export type StartSessionArgs = {
   specialist: Specialist;
   keyterms?: string[];
   title?: string;
+  platform?: MeetingPlatform;
+};
+
+export type DetectedMeeting = {
+  platform: 'teams' | 'meet';
+  detectedAt: number;
+  evidence: string;
 };
 
 export type MeetingInfo = {

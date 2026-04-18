@@ -72,7 +72,7 @@ export class MeetingSession extends EventEmitter {
       try {
         meetingId = await mc.createMeeting({
           title: args.title ?? `Meeting ${new Date().toISOString()}`,
-          platform: 'skymark',
+          platform: args.platform ?? 'skymark',
           specialist: args.specialist,
         });
       } catch (err) {

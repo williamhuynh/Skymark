@@ -4,6 +4,7 @@ import {
   Tray,
   Menu,
   nativeImage,
+  Notification,
   safeStorage,
   ipcMain,
   session,
@@ -14,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import Store from 'electron-store';
 import type {
+  DetectedMeeting,
   Nudge,
   QuestionAnswer,
   Settings,
@@ -22,6 +24,7 @@ import type {
   TranscriptEvent,
 } from '../shared/types';
 import { MeetingSession } from './meeting/session';
+import { MeetingDetector } from './detect/meeting-detector';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
@@ -49,7 +52,47 @@ function applyAutostart(enabled: boolean): void {
   }
 }
 
+function applyAutoDetect(enabled: boolean): void {
+  if (enabled) {
+    detector.start();
+  } else {
+    detector.stop();
+  }
+}
+
+async function handleDetectedMeeting(detected: DetectedMeeting): Promise<void> {
+  const settings = publicSettings();
+  const specialist = settings.defaultSpecialist;
+  const platformName = detected.platform === 'teams' ? 'Teams' : 'Google Meet';
+
+  const notification = new Notification({
+    title: `${platformName} meeting detected`,
+    body:
+      specialist === 'none'
+        ? 'Click to open Skymark and start listening.'
+        : `Click to start Skymark with ${specialist}.`,
+    silent: false,
+  });
+
+  notification.on('click', async () => {
+    if (meeting.getState().phase !== 'idle') {
+      toggleMainWindow();
+      return;
+    }
+    if (specialist === 'none') {
+      // No default set — open the main window so the user picks.
+      mainWindow?.show();
+      mainWindow?.focus();
+      return;
+    }
+    await meeting.start({ specialist, platform: detected.platform });
+  });
+
+  notification.show();
+}
+
 const meeting = new MeetingSession(store);
+const detector = new MeetingDetector();
 
 let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -201,6 +244,9 @@ function registerIpc() {
     if (Object.prototype.hasOwnProperty.call(patch, 'autostart')) {
       applyAutostart(Boolean(patch.autostart));
     }
+    if (Object.prototype.hasOwnProperty.call(patch, 'autoDetect')) {
+      applyAutoDetect(Boolean(patch.autoDetect));
+    }
     return publicSettings();
   });
 
@@ -259,17 +305,29 @@ function wireSessionBroadcast() {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('dev.sky.skymark');
+  }
   registerDisplayMediaHandler();
   createMainWindow();
   createTray();
   registerIpc();
   wireSessionBroadcast();
-  // Reconcile OS autostart state with the stored preference on each launch.
+  // Reconcile OS autostart + detector state with the stored preferences on each launch.
   applyAutostart(Boolean(store.get('autostart')));
+  applyAutoDetect(Boolean(store.get('autoDetect')));
+
+  detector.on('detected', (d: DetectedMeeting) => {
+    void handleDetectedMeeting(d);
+  });
+  detector.on('ended', () => {
+    // No UI hook yet — the detector's own state clears, next detection can trigger again.
+  });
 });
 
 app.on('before-quit', async () => {
   isQuitting = true;
+  detector.stop();
   await meeting.stop();
 });
 
