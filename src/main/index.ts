@@ -325,10 +325,20 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('before-quit', async () => {
+let shuttingDown = false;
+
+app.on('before-quit', (event) => {
+  if (shuttingDown) return;
+  // Electron doesn't await async before-quit handlers, so we block the quit,
+  // run cleanup, then app.exit() when it actually finishes.
+  event.preventDefault();
+  shuttingDown = true;
   isQuitting = true;
   detector.stop();
-  await meeting.stop();
+  meeting
+    .stop()
+    .catch((err) => console.warn('[shutdown] meeting.stop failed:', err))
+    .finally(() => app.exit(0));
 });
 
 app.on('window-all-closed', () => {
