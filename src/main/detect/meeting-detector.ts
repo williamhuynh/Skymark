@@ -6,7 +6,36 @@ const POLL_INTERVAL_MS = 5_000;
 const RETRIGGER_COOLDOWN_MS = 60_000;
 
 const TEAMS_PROCESS_NAMES = new Set(['ms-teams.exe', 'Teams.exe']);
-const MEET_TITLE_HINTS = [/\bMeet\b.*\bGoogle Chrome\b/i, /\bGoogle Meet\b/i, /\bMeet\b.*\bEdge\b/i];
+
+/**
+ * Patterns that indicate Teams is *in an active call*, not just open.
+ * Teams runs in the background all day on most Windows machines, so we
+ * must rely on window-title signals (Meeting / Calling / Call with…).
+ * These are best-effort — the exact titles vary by Teams version and
+ * locale; tune as we see real failures.
+ */
+const TEAMS_ACTIVE_CALL_HINTS = [
+  /\bMeeting\b.*Microsoft Teams/i,
+  /Microsoft Teams.*\bMeeting\b/i,
+  /\bCalling\b.*Microsoft Teams/i,
+  /Microsoft Teams.*\bCalling\b/i,
+  /\bCall with\b.*Microsoft Teams/i,
+  /Microsoft Teams.*\bCall with\b/i,
+  /Microsoft Teams\s*\|\s*(Meeting|Calling|Call|Screen sharing)/i,
+];
+
+/**
+ * Google Meet window-title patterns. When you're on the meet.google.com
+ * landing page the title is just "Google Meet" — too loose. We match
+ * the in-call titles which include a meeting code (xxx-xxxx-xxx) or a
+ * meeting name followed by " - Google Meet".
+ */
+const MEET_ACTIVE_CALL_HINTS = [
+  /\b[a-z]{3}-[a-z]{4}-[a-z]{3}\b.*Google Meet/i,           // code - name - Meet
+  /Google Meet.*\b[a-z]{3}-[a-z]{4}-[a-z]{3}\b/i,
+  /Meet\s*[-–—]\s*\w.+(Chrome|Edge|Brave|Firefox)/i,
+  /Google Meet\s*[-–—]\s*\w/i,
+];
 
 type TaskRow = {
   imageName: string;
@@ -22,17 +51,15 @@ function runTasklist(): Promise<TaskRow[]> {
         resolve([]);
         return;
       }
-      const rows = parseTasklistCsv(stdout);
-      resolve(rows);
+      resolve(parseTasklistCsv(stdout));
     });
   });
 }
 
-function parseTasklistCsv(csv: string): TaskRow[] {
+export function parseTasklistCsv(csv: string): TaskRow[] {
   const rows: TaskRow[] = [];
   for (const line of csv.split(/\r?\n/)) {
     if (!line.trim()) continue;
-    // Minimal CSV: tasklist double-quotes every field and comma-separates.
     const fields = parseCsvLine(line);
     if (fields.length < 9) continue;
     rows.push({
@@ -69,22 +96,36 @@ function parseCsvLine(line: string): string[] {
   return out;
 }
 
-function detectFromTasks(rows: TaskRow[]): DetectedMeeting | null {
+function matchesAny(title: string, patterns: RegExp[]): boolean {
+  return patterns.some((re) => re.test(title));
+}
+
+export function detectFromTasks(rows: TaskRow[]): DetectedMeeting | null {
+  // Teams: must be a Teams process AND have an active-call title.
   for (const row of rows) {
-    if (TEAMS_PROCESS_NAMES.has(row.imageName)) {
-      return { platform: 'teams', detectedAt: Date.now(), evidence: `${row.imageName} (pid ${row.pid})` };
-    }
-  }
-  for (const row of rows) {
+    if (!TEAMS_PROCESS_NAMES.has(row.imageName)) continue;
     if (!row.windowTitle || row.windowTitle === 'N/A') continue;
-    if (MEET_TITLE_HINTS.some((re) => re.test(row.windowTitle))) {
+    if (matchesAny(row.windowTitle, TEAMS_ACTIVE_CALL_HINTS)) {
       return {
-        platform: 'meet',
+        platform: 'teams',
         detectedAt: Date.now(),
-        evidence: `window title "${row.windowTitle}"`,
+        evidence: `${row.imageName} window "${row.windowTitle}"`,
       };
     }
   }
+
+  // Meet: any browser window with an active-call title.
+  for (const row of rows) {
+    if (!row.windowTitle || row.windowTitle === 'N/A') continue;
+    if (matchesAny(row.windowTitle, MEET_ACTIVE_CALL_HINTS)) {
+      return {
+        platform: 'meet',
+        detectedAt: Date.now(),
+        evidence: `window "${row.windowTitle}"`,
+      };
+    }
+  }
+
   return null;
 }
 
