@@ -131,6 +131,25 @@ function loadView(win: BrowserWindow, view: 'main' | 'sidebar'): void {
   }
 }
 
+function registerDebugShortcuts(win: BrowserWindow): void {
+  // We set Menu.setApplicationMenu(null) to hide the default Windows menu,
+  // which also strips the default devtools / reload accelerators.
+  // Re-wire them here so power users + debugging still work.
+  win.webContents.on('before-input-event', (_event, input) => {
+    if (input.type !== 'keyDown') return;
+    const key = input.key.toLowerCase();
+    if (key === 'f12' || (input.control && input.shift && key === 'i')) {
+      if (win.webContents.isDevToolsOpened()) {
+        win.webContents.closeDevTools();
+      } else {
+        win.webContents.openDevTools({ mode: 'detach' });
+      }
+    } else if (input.control && key === 'r' && !input.shift) {
+      win.webContents.reload();
+    }
+  });
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 800,
@@ -144,6 +163,8 @@ function createMainWindow() {
       contextIsolation: true,
     },
   });
+
+  registerDebugShortcuts(mainWindow);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -193,6 +214,8 @@ function createSidebarWindow() {
       contextIsolation: true,
     },
   });
+
+  registerDebugShortcuts(sidebarWindow);
 
   sidebarWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {

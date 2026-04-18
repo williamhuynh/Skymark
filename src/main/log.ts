@@ -19,6 +19,11 @@ export function initLogging(): void {
   log.transports.file.format =
     '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';
 
+  // Forward console.* calls from renderers into the main log too. Lets us
+  // see [audio] diagnostic output without opening DevTools in the installed
+  // app — everything lands in main.log.
+  log.initialize({ preload: true });
+
   // Catch unhandled exceptions and rejections → file + console.
   log.errorHandler.startCatching({
     showDialog: false,
