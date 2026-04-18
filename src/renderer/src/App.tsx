@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type {
   Settings,
   SessionState,
@@ -23,7 +23,10 @@ import {
   Sparkles,
   Clock,
   CheckCircle2,
+  Download,
+  RefreshCw,
 } from 'lucide-react';
+import type { UpdateState } from '../../shared/types';
 
 type Tab = 'meeting' | 'history' | 'settings';
 
@@ -72,6 +75,9 @@ export function App() {
     flashSaved('mcUrl');
   }, 500);
 
+  const [appVersion, setAppVersion] = useState<string>('');
+  const [updateState, setUpdateState] = useState<UpdateState>({ phase: 'idle' });
+
   useEffect(() => {
     void (async () => {
       const [s, has, st] = await Promise.all([
@@ -84,7 +90,15 @@ export function App() {
       setSessionState(st);
       setPickedSpecialist(s.defaultSpecialist === 'none' ? 'naa-project' : s.defaultSpecialist);
       setMcUrlDraft(s.mcUrl);
+      const [version, us] = await Promise.all([
+        window.skymark.updater.getVersion(),
+        window.skymark.updater.getState(),
+      ]);
+      setAppVersion(version);
+      setUpdateState(us);
     })();
+
+    const offUpdate = window.skymark.updater.onState((s) => setUpdateState(s));
 
     const offState = window.skymark.session.onState((next) => setSessionState(next));
     const offTranscript = window.skymark.session.onTranscript((ev) => {
@@ -138,6 +152,7 @@ export function App() {
       offTranscript();
       offNudge();
       offAnswer();
+      offUpdate();
     };
   }, []);
 
@@ -455,6 +470,8 @@ export function App() {
               <span>Launch Skymark automatically (minimised to tray) when Windows starts</span>
             </label>
           </div>
+
+          <UpdateCard version={appVersion} state={updateState} />
         </section>
       )}
 
@@ -462,6 +479,79 @@ export function App() {
         <p className="version">skymark · v0.0.1 · audio + MC</p>
       </footer>
     </main>
+  );
+}
+
+function UpdateCard({ version, state }: { version: string; state: UpdateState }) {
+  let content: ReactNode;
+  switch (state.phase) {
+    case 'idle':
+      content = (
+        <button className="ghost" onClick={() => void window.skymark.updater.check()}>
+          <RefreshCw size={13} />
+          <span>Check for updates</span>
+        </button>
+      );
+      break;
+    case 'checking':
+      content = (
+        <button className="ghost" disabled>
+          <RefreshCw size={13} className="spinning" />
+          <span>Checking…</span>
+        </button>
+      );
+      break;
+    case 'downloading':
+      content = (
+        <div className="update-progress">
+          <div className="update-progress-label">
+            <Download size={13} />
+            <span>Downloading v{state.version} — {state.progress}%</span>
+          </div>
+          <div className="update-progress-bar">
+            <div className="update-progress-fill" style={{ width: `${state.progress}%` }} />
+          </div>
+        </div>
+      );
+      break;
+    case 'ready':
+      content = (
+        <button onClick={() => void window.skymark.updater.install()}>
+          <Download size={13} />
+          <span>Restart + install v{state.version}</span>
+        </button>
+      );
+      break;
+    case 'up-to-date':
+      content = (
+        <div className="row">
+          <span className="status ok">You're on the latest version.</span>
+          <button className="ghost" onClick={() => void window.skymark.updater.check()}>
+            <RefreshCw size={13} />
+            <span>Check again</span>
+          </button>
+        </div>
+      );
+      break;
+    case 'error':
+      content = (
+        <>
+          <p className="status error">{state.message}</p>
+          <button className="ghost" onClick={() => void window.skymark.updater.check()}>
+            <RefreshCw size={13} />
+            <span>Retry</span>
+          </button>
+        </>
+      );
+      break;
+  }
+
+  return (
+    <div className="card">
+      <h2>About</h2>
+      <p className="help">Skymark {version ? `v${version}` : ''} · auto-updates check every 4 hours</p>
+      {content}
+    </div>
   );
 }
 

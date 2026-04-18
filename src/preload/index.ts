@@ -8,6 +8,7 @@ import type {
   SkymarkApi,
   StartSessionArgs,
   TranscriptEvent,
+  UpdateState,
 } from '../shared/types';
 
 const api: SkymarkApi = {
@@ -54,6 +55,17 @@ const api: SkymarkApi = {
   mc: {
     testConnection: (url: string) => ipcRenderer.invoke('mc:test-connection', url),
     listMeetings: (limit?: number) => ipcRenderer.invoke('mc:list-meetings', limit),
+  },
+  updater: {
+    getVersion: () => ipcRenderer.invoke('updater:get-version'),
+    getState: () => ipcRenderer.invoke('updater:get-state'),
+    check: () => ipcRenderer.invoke('updater:check'),
+    install: () => ipcRenderer.invoke('updater:install'),
+    onState: (cb: (state: UpdateState) => void) => {
+      const handler = (_e: unknown, state: UpdateState) => cb(state);
+      ipcRenderer.on('updater:state', handler);
+      return () => ipcRenderer.removeListener('updater:state', handler);
+    },
   },
 };
 

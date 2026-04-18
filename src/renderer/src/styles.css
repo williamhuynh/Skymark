@@ -1064,3 +1064,30 @@ button:disabled {
 .statusbar-icon {
   flex: 0 0 auto;
 }
+
+.update-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.update-progress-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--size-sm);
+  color: var(--text-secondary);
+}
+
+.update-progress-bar {
+  height: 4px;
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.update-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 200ms var(--ease);
+}

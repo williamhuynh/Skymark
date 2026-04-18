@@ -26,7 +26,8 @@ import type {
 import { MeetingSession } from './meeting/session';
 import { MeetingDetector } from './detect/meeting-detector';
 import { initLogging, log } from './log';
-import { initAutoUpdate } from './auto-update';
+import { updateController } from './auto-update';
+import type { UpdateState } from '../shared/types';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
@@ -328,6 +329,11 @@ function registerIpc() {
     }
   });
 
+  ipcMain.handle('updater:get-version', () => app.getVersion());
+  ipcMain.handle('updater:get-state', () => updateController.getState());
+  ipcMain.handle('updater:check', () => updateController.check('manual'));
+  ipcMain.handle('updater:install', () => updateController.install());
+
   ipcMain.handle('mc:list-meetings', async (_e, limit: number = 30) => {
     const url = store.get('mcUrl') as string | undefined;
     if (!url) return { ok: false, error: 'MC URL not configured' };
@@ -372,7 +378,8 @@ function wireSessionBroadcast() {
 
 app.whenReady().then(() => {
   initLogging();
-  initAutoUpdate();
+  updateController.init();
+  updateController.on('state', (state: UpdateState) => broadcast('updater:state', state));
   if (process.platform === 'win32') {
     app.setAppUserModelId('dev.sky.skymark');
   }

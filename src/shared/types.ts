@@ -79,6 +79,14 @@ export type AskResult =
   | { ok: true; questionId: string }
   | { ok: false; error: string };
 
+export type UpdateState =
+  | { phase: 'idle' }
+  | { phase: 'checking' }
+  | { phase: 'downloading'; version: string; progress: number }
+  | { phase: 'ready'; version: string }
+  | { phase: 'up-to-date' }
+  | { phase: 'error'; message: string };
+
 export type SkymarkApi = {
   settings: {
     get: () => Promise<Settings>;
@@ -107,5 +115,12 @@ export type SkymarkApi = {
   mc: {
     testConnection: (url: string) => Promise<{ ok: true } | { ok: false; error: string }>;
     listMeetings: (limit?: number) => Promise<{ ok: true; meetings: MeetingRow[] } | { ok: false; error: string }>;
+  };
+  updater: {
+    getVersion: () => Promise<string>;
+    getState: () => Promise<UpdateState>;
+    check: () => Promise<void>;
+    install: () => Promise<void>;
+    onState: (cb: (state: UpdateState) => void) => () => void;
   };
 };
