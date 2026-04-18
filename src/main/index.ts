@@ -369,6 +369,26 @@ function registerDisplayMediaHandler() {
   });
 }
 
+function registerMediaPermissions() {
+  // Electron blocks all permissions by default. Without this, getUserMedia({audio})
+  // silently fails — no mic, no transcript. Auto-grant media-type permissions;
+  // everything else (notifications, geolocation, etc.) stays denied.
+  const allowedPermissions = new Set([
+    'media',
+    'mediaKeySystem',
+    'display-capture',
+    'audioCapture',
+    'videoCapture',
+  ]);
+
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(allowedPermissions.has(permission));
+  });
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) =>
+    allowedPermissions.has(permission),
+  );
+}
+
 function wireSessionBroadcast() {
   meeting.on('state', (state: SessionState) => broadcast('session:state', state));
   meeting.on('transcript', (ev: TranscriptEvent) => broadcast('session:transcript', ev));
@@ -384,6 +404,7 @@ app.whenReady().then(() => {
     app.setAppUserModelId('dev.sky.skymark');
   }
   registerDisplayMediaHandler();
+  registerMediaPermissions();
   createMainWindow();
   createTray();
   registerIpc();

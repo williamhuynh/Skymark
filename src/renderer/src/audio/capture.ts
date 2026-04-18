@@ -49,13 +49,15 @@ async function getSystemAudioStream(): Promise<MediaStream | null> {
 
 async function getMicStream(): Promise<MediaStream | null> {
   try {
-    return await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         channelCount: 1,
       },
     });
+    console.info('[audio] mic stream acquired, tracks:', stream.getAudioTracks().length);
+    return stream;
   } catch (err) {
     console.warn('[audio] mic capture failed:', err);
     return null;
@@ -66,6 +68,12 @@ export async function startAudioCapture(
   cb: AudioCaptureCallbacks,
 ): Promise<AudioCaptureHandle> {
   const [systemStream, micStream] = await Promise.all([getSystemAudioStream(), getMicStream()]);
+  console.info(
+    '[audio] sources — system:',
+    systemStream ? 'ok' : 'none',
+    'mic:',
+    micStream ? 'ok' : 'none',
+  );
   if (!systemStream && !micStream) {
     throw new Error('No audio sources available — grant mic and/or screen-audio permission');
   }
