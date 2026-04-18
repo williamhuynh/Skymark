@@ -1,24 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { Settings, SkymarkApi } from '../shared/types';
 
-export type Settings = {
-  mcUrl: string;
-  defaultSpecialist: 'naa-project' | 'aid-coo' | 'none';
-  autoDetect: boolean;
-};
-
-const api = {
+const api: SkymarkApi = {
   settings: {
-    get: (): Promise<Settings> => ipcRenderer.invoke('settings:get'),
-    set: (patch: Partial<Settings>): Promise<Settings> =>
-      ipcRenderer.invoke('settings:set', patch),
+    get: () => ipcRenderer.invoke('settings:get'),
+    set: (patch: Partial<Settings>) => ipcRenderer.invoke('settings:set', patch),
   },
   deepgramKey: {
-    set: (key: string): Promise<boolean> => ipcRenderer.invoke('deepgram-key:set', key),
-    has: (): Promise<boolean> => ipcRenderer.invoke('deepgram-key:has'),
-    clear: (): Promise<boolean> => ipcRenderer.invoke('deepgram-key:clear'),
+    set: (key: string) => ipcRenderer.invoke('deepgram-key:set', key),
+    has: () => ipcRenderer.invoke('deepgram-key:has'),
+    clear: () => ipcRenderer.invoke('deepgram-key:clear'),
   },
 };
 
 contextBridge.exposeInMainWorld('skymark', api);
-
-export type SkymarkApi = typeof api;

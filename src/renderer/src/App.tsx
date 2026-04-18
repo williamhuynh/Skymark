@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Settings } from '../../preload';
+import type { Settings } from '../../shared/types';
 
 export function App() {
   const [settings, setSettings] = useState<Settings | null>(null);

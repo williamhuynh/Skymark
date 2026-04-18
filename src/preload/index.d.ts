@@ -1,4 +1,4 @@
-import type { SkymarkApi } from './index';
+import type { SkymarkApi } from '../shared/types';
 
 declare global {
   interface Window {

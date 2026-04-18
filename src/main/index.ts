@@ -2,17 +2,14 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, safeStorage, ipcMain } fro
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import Store from 'electron-store';
+import type { Settings } from '../shared/types';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 
-type Settings = {
-  mcUrl: string;
-  defaultSpecialist: 'naa-project' | 'aid-coo' | 'none';
-  autoDetect: boolean;
-};
+type StoreSchema = Settings & { deepgramKeyEncrypted?: string };
 
-const store = new Store<Settings>({
+const store = new Store<StoreSchema>({
   defaults: {
     mcUrl: 'http://localhost:3002',
     defaultSpecialist: 'none',
@@ -22,6 +19,7 @@ const store = new Store<Settings>({
 
 let tray: Tray | null = null;
 let window: BrowserWindow | null = null;
+let isQuitting = false;
 
 function createWindow() {
   window = new BrowserWindow({
@@ -29,26 +27,25 @@ function createWindow() {
     height: 640,
     show: false,
     resizable: false,
-    titleBarStyle: 'default',
     title: 'Skymark',
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
+      preload: path.join(__dirname, '../preload/index.mjs'),
       sandbox: true,
       contextIsolation: true,
     },
   });
 
   window.on('close', (event) => {
-    if (!app.isQuitting) {
+    if (!isQuitting) {
       event.preventDefault();
       window?.hide();
     }
   });
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-    window.loadURL(process.env['ELECTRON_RENDERER_URL']);
+    void window.loadURL(process.env['ELECTRON_RENDERER_URL']);
   } else {
-    window.loadFile(path.join(__dirname, '../renderer/index.html'));
+    void window.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
 }
 
@@ -73,7 +70,7 @@ function createTray() {
       {
         label: 'Quit',
         click: () => {
-          app.isQuitting = true;
+          isQuitting = true;
           app.quit();
         },
       },
@@ -82,11 +79,17 @@ function createTray() {
   tray.on('click', toggleWindow);
 }
 
+function publicSettings(): Omit<Settings, 'deepgramKeyEncrypted'> {
+  const { deepgramKeyEncrypted: _ignored, ...rest } = store.store;
+  return rest;
+}
+
 function registerIpc() {
-  ipcMain.handle('settings:get', () => store.store);
-  ipcMain.handle('settings:set', (_e, patch: Partial<Settings>) => {
-    store.set({ ...store.store, ...patch });
-    return store.store;
+  ipcMain.handle('settings:get', () => publicSettings());
+  ipcMain.handle('settings:set', (_e, patch: Partial<Omit<Settings, 'deepgramKeyEncrypted'>>) => {
+    const current = store.store;
+    store.store = { ...current, ...patch };
+    return publicSettings();
   });
 
   ipcMain.handle('deepgram-key:set', (_e, key: string) => {
@@ -94,16 +97,14 @@ function registerIpc() {
       throw new Error('OS-level encryption unavailable — cannot store Deepgram key securely');
     }
     const encrypted = safeStorage.encryptString(key);
-    store.set('deepgramKeyEncrypted' as keyof Settings, encrypted.toString('base64') as unknown as Settings[keyof Settings]);
+    store.set('deepgramKeyEncrypted', encrypted.toString('base64'));
     return true;
   });
 
-  ipcMain.handle('deepgram-key:has', () => {
-    return Boolean(store.get('deepgramKeyEncrypted' as keyof Settings));
-  });
+  ipcMain.handle('deepgram-key:has', () => Boolean(store.get('deepgramKeyEncrypted')));
 
   ipcMain.handle('deepgram-key:clear', () => {
-    store.delete('deepgramKeyEncrypted' as keyof Settings);
+    store.delete('deepgramKeyEncrypted');
     return true;
   });
 }
@@ -114,12 +115,10 @@ app.whenReady().then(() => {
   registerIpc();
 });
 
-app.on('window-all-closed', (event: Electron.Event) => {
-  event.preventDefault();
+app.on('before-quit', () => {
+  isQuitting = true;
 });
 
-declare module 'electron' {
-  interface App {
-    isQuitting?: boolean;
-  }
-}
+app.on('window-all-closed', () => {
+  // Keep running in the tray on Windows/Linux; only macOS traditionally quits.
+});
