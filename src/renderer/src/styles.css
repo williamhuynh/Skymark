@@ -239,6 +239,104 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* Onboarding ----------------------------------------------------- */
+
+.onboarding {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 40px 20px;
+}
+
+.onboarding-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 520px;
+  width: 100%;
+  padding: 24px;
+  background: #181d24;
+  border: 1px solid #232a33;
+  border-radius: 12px;
+}
+
+.onboarding-card h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.onboarding-lead {
+  margin: 0;
+  color: #a8b2c2;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.onboarding-steps {
+  margin: 0;
+  padding-left: 20px;
+  color: #c3cad7;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.onboarding-steps li + li {
+  margin-top: 8px;
+}
+
+.onboarding-steps a {
+  color: #4b93ff;
+  text-decoration: none;
+}
+
+.onboarding-steps a:hover {
+  text-decoration: underline;
+}
+
+.onboarding-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.onboarding-row input {
+  flex: 1;
+}
+
+.onboarding-what-next {
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: #131820;
+  border: 1px solid #1e2530;
+  border-radius: 8px;
+  color: #a8b2c2;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.onboarding-what-next summary {
+  cursor: pointer;
+  color: #8b95a4;
+  user-select: none;
+}
+
+.onboarding-what-next summary:hover {
+  color: #c3cad7;
+}
+
+.onboarding-what-next p {
+  margin: 8px 0;
+}
+
+.onboarding-what-next ul {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
 /* Sidebar window ------------------------------------------------- */
 
 .sidebar {
@@ -315,11 +413,24 @@ body {
   border-style: dashed;
 }
 
+.bubble-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .bubble .speaker {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.bubble .timestamp {
+  color: #5b6371;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .bubble .text {

@@ -1,5 +1,11 @@
 export type Specialist = 'naa-project' | 'aid-coo' | 'none';
 
+export const SPECIALIST_LABELS: Record<Specialist, string> = {
+  'naa-project': 'NAA Project',
+  'aid-coo': 'AiD COO',
+  none: 'None (transcript only)',
+};
+
 export type Settings = {
   mcUrl: string;
   defaultSpecialist: Specialist;

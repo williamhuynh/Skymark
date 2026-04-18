@@ -7,8 +7,10 @@ import type {
   Nudge,
   QuestionAnswer,
 } from '../../shared/types';
+import { SPECIALIST_LABELS } from '../../shared/types';
 import { startAudioCapture, type AudioCaptureHandle } from './audio/capture';
 import { TranscriptView } from './TranscriptView';
+import { Onboarding } from './Onboarding';
 
 type Tab = 'meeting' | 'settings';
 
@@ -192,6 +194,14 @@ export function App() {
     return <main className="app"><p>Loading…</p></main>;
   }
 
+  if (!hasKey) {
+    return (
+      <main className="app">
+        <Onboarding onKeySaved={() => setHasKey(true)} />
+      </main>
+    );
+  }
+
   const isActive =
     sessionState.phase === 'listening' ||
     sessionState.phase === 'connecting' ||
@@ -219,10 +229,11 @@ export function App() {
               value={pickedSpecialist}
               onChange={(e) => setPickedSpecialist(e.target.value as Specialist)}
               disabled={isActive}
+              aria-label="Specialist"
             >
-              <option value="naa-project">naa-project</option>
-              <option value="aid-coo">aid-coo</option>
-              <option value="none">none (transcript only, no MC)</option>
+              <option value="naa-project">{SPECIALIST_LABELS['naa-project']}</option>
+              <option value="aid-coo">{SPECIALIST_LABELS['aid-coo']}</option>
+              <option value="none">{SPECIALIST_LABELS['none']}</option>
             </select>
             {isActive ? (
               <button className="danger" onClick={stopMeeting}>Stop</button>
@@ -289,7 +300,7 @@ export function App() {
               <div className="row">
                 <input
                   type="password"
-                  placeholder="dg_…"
+                  placeholder="40-character Deepgram API key"
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
                   spellCheck={false}
@@ -318,8 +329,8 @@ export function App() {
               onChange={(e) => void save({ defaultSpecialist: e.target.value as Specialist })}
             >
               <option value="none">None (ask each time)</option>
-              <option value="naa-project">naa-project</option>
-              <option value="aid-coo">aid-coo</option>
+              <option value="naa-project">{SPECIALIST_LABELS['naa-project']}</option>
+              <option value="aid-coo">{SPECIALIST_LABELS['aid-coo']}</option>
             </select>
           </div>
 

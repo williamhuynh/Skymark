@@ -4,7 +4,18 @@ import type { TranscriptEvent } from '../../shared/types';
 type Props = {
   events: TranscriptEvent[];
   interim: TranscriptEvent | null;
+  compact?: boolean;
 };
+
+function formatTimestamp(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  if (hours > 0) return `${hours}:${pad(minutes)}:${pad(seconds)}`;
+  return `${pad(minutes)}:${pad(seconds)}`;
+}
 
 const SPEAKER_COLOURS = [
   '#ffd166',
@@ -24,7 +35,7 @@ function speakerColour(speaker: string | null): string {
   return SPEAKER_COLOURS[idx];
 }
 
-export function TranscriptView({ events, interim }: Props) {
+export function TranscriptView({ events, interim, compact = false }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
 
@@ -50,17 +61,23 @@ export function TranscriptView({ events, interim }: Props) {
       )}
       {events.map((ev) => (
         <div key={`${ev.startMs}-${ev.speaker ?? 'unk'}-${ev.text.length}`} className="bubble">
-          <span className="speaker" style={{ color: speakerColour(ev.speaker) }}>
-            {ev.speaker ?? 'Speaker'}
-          </span>
+          <div className="bubble-header">
+            <span className="speaker" style={{ color: speakerColour(ev.speaker) }}>
+              {ev.speaker ?? 'Speaker'}
+            </span>
+            {!compact && <span className="timestamp">{formatTimestamp(ev.startMs)}</span>}
+          </div>
           <span className="text">{ev.text}</span>
         </div>
       ))}
       {interim && (
         <div className="bubble interim">
-          <span className="speaker" style={{ color: speakerColour(interim.speaker) }}>
-            {interim.speaker ?? 'Speaker'}
-          </span>
+          <div className="bubble-header">
+            <span className="speaker" style={{ color: speakerColour(interim.speaker) }}>
+              {interim.speaker ?? 'Speaker'}
+            </span>
+            {!compact && <span className="timestamp">{formatTimestamp(interim.startMs)}</span>}
+          </div>
           <span className="text">{interim.text}</span>
         </div>
       )}
