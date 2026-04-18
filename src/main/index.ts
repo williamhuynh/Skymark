@@ -126,7 +126,7 @@ function createMainWindow() {
     show: false,
     title: 'Skymark',
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.mjs'),
+      preload: path.join(__dirname, '../preload/index.js'),
       sandbox: true,
       contextIsolation: true,
     },
@@ -167,7 +167,7 @@ function createSidebarWindow() {
     minimizable: true,
     maximizable: false,
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.mjs'),
+      preload: path.join(__dirname, '../preload/index.js'),
       sandbox: true,
       contextIsolation: true,
     },

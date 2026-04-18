@@ -16,6 +16,13 @@ export default defineConfig({
       outDir: 'out/preload',
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/preload/index.ts') },
+        // Force CommonJS output for the preload — sandboxed preloads with
+        // ESM .mjs have loader/resolution edge cases inside asar-packaged
+        // Electron builds. CJS just works.
+        output: {
+          format: 'cjs',
+          entryFileNames: '[name].js',
+        },
       },
     },
   },
