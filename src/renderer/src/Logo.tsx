@@ -12,8 +12,8 @@ export function Logo({ size = 20 }: Props) {
       aria-hidden
       focusable={false}
     >
-      <circle cx="12" cy="12" r="9.5" stroke="#4b93ff" strokeWidth="1.5" />
-      <circle cx="12" cy="12" r="3.5" fill="#4b93ff" />
+      <circle cx="12" cy="12" r="9.5" stroke="var(--accent)" strokeWidth="1.5" />
+      <circle cx="12" cy="12" r="3.5" fill="var(--accent)" />
     </svg>
   );
 }

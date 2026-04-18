@@ -18,19 +18,19 @@ function formatTimestamp(ms: number): string {
 }
 
 const SPEAKER_COLOURS = [
-  '#ffd166',
-  '#06d6a0',
-  '#118ab2',
-  '#ef476f',
-  '#8338ec',
-  '#fb5607',
+  'var(--speaker-0)',
+  'var(--speaker-1)',
+  'var(--speaker-2)',
+  'var(--speaker-3)',
+  'var(--speaker-4)',
+  'var(--speaker-5)',
 ];
 
 function speakerColour(speaker: string | null): string {
-  if (!speaker) return '#8b95a4';
-  if (speaker === 'Multiple') return '#8b95a4';
+  if (!speaker) return 'var(--text-muted)';
+  if (speaker === 'Multiple') return 'var(--text-muted)';
   const match = /Speaker (\d+)/.exec(speaker);
-  if (!match) return '#8b95a4';
+  if (!match) return 'var(--text-muted)';
   const idx = parseInt(match[1], 10) % SPEAKER_COLOURS.length;
   return SPEAKER_COLOURS[idx];
 }
