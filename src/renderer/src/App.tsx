@@ -12,6 +12,7 @@ import { startAudioCapture, type AudioCaptureHandle } from './audio/capture';
 import { TranscriptView } from './TranscriptView';
 import { Onboarding } from './Onboarding';
 import { useDebouncedCallback } from './hooks/useDebouncedCallback';
+import { Logo } from './Logo';
 
 type Tab = 'meeting' | 'settings';
 
@@ -235,12 +236,25 @@ export function App() {
   return (
     <main className="app">
       <header className="app-header">
-        <h1>Skymark</h1>
-        <nav className="tabs">
-          <button className={tab === 'meeting' ? 'tab active' : 'tab'} onClick={() => setTab('meeting')}>
+        <div className="brand">
+          <Logo />
+          <h1>Skymark</h1>
+        </div>
+        <nav className="tabs" role="tablist" aria-label="Views">
+          <button
+            role="tab"
+            aria-selected={tab === 'meeting'}
+            className={tab === 'meeting' ? 'tab active' : 'tab'}
+            onClick={() => setTab('meeting')}
+          >
             Meeting
           </button>
-          <button className={tab === 'settings' ? 'tab active' : 'tab'} onClick={() => setTab('settings')}>
+          <button
+            role="tab"
+            aria-selected={tab === 'settings'}
+            className={tab === 'settings' ? 'tab active' : 'tab'}
+            onClick={() => setTab('settings')}
+          >
             Settings
           </button>
         </nav>
@@ -293,20 +307,24 @@ export function App() {
           </div>
 
           {mcLinked && isActive && (
-            <form
-              className="ask"
-              onSubmit={(e) => { e.preventDefault(); void submitAsk(); }}
-            >
-              <input
-                type="text"
-                placeholder="Ask Sky about what's being discussed…"
-                value={askInput}
-                onChange={(e) => setAskInput(e.target.value)}
-              />
-              <button type="submit" disabled={!askInput.trim() || !!askPending}>
-                {askPending ? 'Thinking…' : 'Ask'}
-              </button>
-            </form>
+            <>
+              <form
+                className="ask"
+                onSubmit={(e) => { e.preventDefault(); void submitAsk(); }}
+              >
+                <input
+                  type="text"
+                  placeholder="Ask Sky about what's being discussed…"
+                  value={askInput}
+                  onChange={(e) => setAskInput(e.target.value)}
+                  aria-label="Ask Sky a question"
+                />
+                <button type="submit" disabled={!askInput.trim() || !!askPending}>
+                  {askPending ? 'Thinking…' : 'Ask'}
+                </button>
+              </form>
+              <p className="ask-hint">Enter to ask · answer appears in the feed</p>
+            </>
           )}
           {askError && <p className="status error">{askError}</p>}
         </section>
@@ -469,8 +487,8 @@ function StatusBar({ state, linked }: { state: SessionState; linked: boolean }) 
       break;
   }
   return (
-    <div className={`statusbar ${cls}`}>
-      <span className="dot" />
+    <div className={`statusbar ${cls}`} role="status">
+      <span className="dot" aria-hidden />
       <span>{text}</span>
       {linked && <span className="link-tag">MC linked</span>}
     </div>
