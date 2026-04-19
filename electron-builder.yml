@@ -25,12 +25,15 @@ win:
   # binaries, omitting publisherName tells electron-updater to skip that
   # check entirely (see NsisUpdater.verifySignature).
 nsis:
-  oneClick: false
+  # Silent install on first run + silent updates on every subsequent version
+  # (via electron-updater). Standard Slack/Discord/Spotify pattern. Installs to
+  # %LOCALAPPDATA%\Programs\Skymark per-user (no admin required).
+  oneClick: true
   perMachine: false
-  allowToChangeInstallationDirectory: true
   shortcutName: Skymark
   createDesktopShortcut: true
   createStartMenuShortcut: true
+  runAfterFinish: true
   artifactName: Skymark-Setup-${version}.${ext}
 publish:
   provider: github
