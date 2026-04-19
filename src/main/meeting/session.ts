@@ -31,6 +31,7 @@ export class MeetingSession extends EventEmitter {
   private keyterms: string[] | null = null;
   private reconnectTimers: Map<string, NodeJS.Timeout> = new Map();
   private reconnectAttempts: Map<string, number> = new Map();
+  private postMeetingWatcher: AbortController | null = null;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(private readonly store: Store<any>) {
@@ -49,6 +50,12 @@ export class MeetingSession extends EventEmitter {
   async start(args: StartSessionArgs): Promise<{ ok: true; meeting?: MeetingInfo } | { ok: false; error: string }> {
     if (this.state.phase === 'listening' || this.state.phase === 'connecting' || this.state.phase === 'reconnecting') {
       return { ok: false, error: 'Session already active' };
+    }
+    // If a prior meeting's post-meeting watcher is still polling, cancel it.
+    // Otherwise we'd accumulate concurrent pollers on rapid stop/start cycles.
+    if (this.postMeetingWatcher) {
+      this.postMeetingWatcher.abort();
+      this.postMeetingWatcher = null;
     }
 
     const encrypted = this.store.get('deepgramKeyEncrypted') as string | undefined;
@@ -299,33 +306,57 @@ export class MeetingSession extends EventEmitter {
     this.setState({ phase: 'idle' });
 
     // After Stop, kick off a background watcher that polls MC for the
-    // post-meeting summary. When the specialist finishes (status='ended'
-    // with a summary), pull the suggested-todos and fire a
-    // 'post-meeting-ready' event the renderer turns into a toast.
-    if (endedMeeting && endedMeeting.specialist !== 'none' && mcUrl) {
-      void this.watchPostMeeting(endedMeeting.id, mcUrl);
+    // post-meeting summary. When the specialist finishes (status='ended'),
+    // pull the suggested-todos and fire a 'post-meeting-ready' event the
+    // renderer turns into a toast. Watcher is cancelled if a new meeting
+    // starts or a new stop fires before this one finishes.
+    if (endedMeeting && endedMeeting.specialist && endedMeeting.specialist !== 'none' && mcUrl) {
+      if (this.postMeetingWatcher) this.postMeetingWatcher.abort();
+      const controller = new AbortController();
+      this.postMeetingWatcher = controller;
+      void this.watchPostMeeting(endedMeeting.id, mcUrl, controller.signal).finally(() => {
+        if (this.postMeetingWatcher === controller) this.postMeetingWatcher = null;
+      });
     }
   }
 
-  private async watchPostMeeting(meetingId: string, mcUrl: string): Promise<void> {
+  private async watchPostMeeting(
+    meetingId: string,
+    mcUrl: string,
+    signal: AbortSignal,
+  ): Promise<void> {
     const deadline = Date.now() + POST_MEETING_POLL_TIMEOUT_MS;
     const base = mcUrl.replace(/\/$/, '');
     while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, POST_MEETING_POLL_INTERVAL_MS));
+      if (signal.aborted) {
+        log.info('[session] post-meeting watch cancelled for', meetingId);
+        return;
+      }
       try {
-        const res = await fetch(`${base}/api/meetings/${meetingId}`, {
-          signal: AbortSignal.timeout(5000),
+        await new Promise<void>((resolve, reject) => {
+          const t = setTimeout(() => resolve(), POST_MEETING_POLL_INTERVAL_MS);
+          signal.addEventListener('abort', () => {
+            clearTimeout(t);
+            reject(new DOMException('aborted', 'AbortError'));
+          }, { once: true });
         });
+      } catch {
+        return; // aborted during sleep
+      }
+      try {
+        const res = await fetch(`${base}/api/meetings/${meetingId}`, { signal });
         if (!res.ok) continue;
         const meeting = (await res.json()) as {
           status?: string;
           summary?: string | null;
           title?: string | null;
         };
-        if (meeting.status === 'ended' && meeting.summary) {
+        // Treat 'ended' as the terminal state. A specialist may legitimately
+        // return an empty summary — don't spin the poller waiting for text.
+        if (meeting.status === 'ended') {
           const todosRes = await fetch(
             `${base}/api/meetings/${meetingId}/suggested-todos`,
-            { signal: AbortSignal.timeout(5000) },
+            { signal },
           );
           if (!todosRes.ok) return;
           const todos = (await todosRes.json()) as Array<{ status: string }>;
@@ -339,6 +370,7 @@ export class MeetingSession extends EventEmitter {
           return;
         }
       } catch (err) {
+        if ((err as { name?: string }).name === 'AbortError') return;
         log.warn('[session] post-meeting poll error:', err);
       }
     }
