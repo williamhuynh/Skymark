@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type {
   AskResult,
   Nudge,
+  PostMeetingReadyEvent,
   QuestionAnswer,
   Settings,
   SessionState,
@@ -48,6 +49,11 @@ const api: SkymarkApi = {
       ipcRenderer.on('session:answer', handler);
       return () => ipcRenderer.removeListener('session:answer', handler);
     },
+    onPostMeetingReady: (cb: (ev: PostMeetingReadyEvent) => void) => {
+      const handler = (_e: unknown, ev: PostMeetingReadyEvent) => cb(ev);
+      ipcRenderer.on('session:post-meeting-ready', handler);
+      return () => ipcRenderer.removeListener('session:post-meeting-ready', handler);
+    },
   },
   window: {
     toggleSidebar: () => ipcRenderer.invoke('window:toggle-sidebar'),
@@ -64,6 +70,15 @@ const api: SkymarkApi = {
       ipcRenderer.invoke('mc:patch-metadata', meetingId, patch),
     requestBrief: (args: { specialist: Specialist; title?: string }) =>
       ipcRenderer.invoke('mc:request-brief', args),
+    getSuggestedTodos: (meetingId: string) =>
+      ipcRenderer.invoke('mc:get-suggested-todos', meetingId),
+    approveSuggestedTodo: (
+      meetingId: string,
+      actionId: string,
+      overrides?: { text?: string; owner?: string | null },
+    ) => ipcRenderer.invoke('mc:approve-suggested-todo', meetingId, actionId, overrides),
+    dismissSuggestedTodo: (meetingId: string, actionId: string) =>
+      ipcRenderer.invoke('mc:dismiss-suggested-todo', meetingId, actionId),
   },
   updater: {
     getVersion: () => ipcRenderer.invoke('updater:get-version'),

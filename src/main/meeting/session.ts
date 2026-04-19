@@ -8,11 +8,15 @@ import type {
   AskResult,
   MeetingInfo,
   Nudge,
+  PostMeetingReadyEvent,
   QuestionAnswer,
   SessionState,
   StartSessionArgs,
   TranscriptEvent,
 } from '../../shared/types';
+
+const POST_MEETING_POLL_INTERVAL_MS = 5_000;
+const POST_MEETING_POLL_TIMEOUT_MS = 3 * 60_000;
 
 const BACKOFFS_MS = [2_000, 4_000, 8_000, 16_000, 30_000];
 
@@ -277,6 +281,10 @@ export class MeetingSession extends EventEmitter {
       await this.deepgram.close();
       this.deepgram = null;
     }
+
+    const endedMeeting = this.meeting;
+    const mcUrl = this.store.get('mcUrl') as string | undefined;
+
     if (this.mc && this.meeting) {
       await this.mc.endMeeting(this.meeting.id);
       this.mc.close();
@@ -289,5 +297,51 @@ export class MeetingSession extends EventEmitter {
     this.apiKey = null;
     this.keyterms = null;
     this.setState({ phase: 'idle' });
+
+    // After Stop, kick off a background watcher that polls MC for the
+    // post-meeting summary. When the specialist finishes (status='ended'
+    // with a summary), pull the suggested-todos and fire a
+    // 'post-meeting-ready' event the renderer turns into a toast.
+    if (endedMeeting && endedMeeting.specialist !== 'none' && mcUrl) {
+      void this.watchPostMeeting(endedMeeting.id, mcUrl);
+    }
+  }
+
+  private async watchPostMeeting(meetingId: string, mcUrl: string): Promise<void> {
+    const deadline = Date.now() + POST_MEETING_POLL_TIMEOUT_MS;
+    const base = mcUrl.replace(/\/$/, '');
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, POST_MEETING_POLL_INTERVAL_MS));
+      try {
+        const res = await fetch(`${base}/api/meetings/${meetingId}`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) continue;
+        const meeting = (await res.json()) as {
+          status?: string;
+          summary?: string | null;
+          title?: string | null;
+        };
+        if (meeting.status === 'ended' && meeting.summary) {
+          const todosRes = await fetch(
+            `${base}/api/meetings/${meetingId}/suggested-todos`,
+            { signal: AbortSignal.timeout(5000) },
+          );
+          if (!todosRes.ok) return;
+          const todos = (await todosRes.json()) as Array<{ status: string }>;
+          const suggestedCount = todos.filter((t) => t.status === 'suggested').length;
+          const ev: PostMeetingReadyEvent = {
+            meetingId,
+            title: meeting.title ?? 'Meeting',
+            suggestedCount,
+          };
+          this.emit('post-meeting-ready', ev);
+          return;
+        }
+      } catch (err) {
+        log.warn('[session] post-meeting poll error:', err);
+      }
+    }
+    log.warn('[session] post-meeting watch timed out for', meetingId);
   }
 }

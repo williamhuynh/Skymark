@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { RefreshCw, ExternalLink, History as HistoryIcon, FileText } from 'lucide-react';
-import type { MeetingRow, Specialist } from '../../shared/types';
+import { RefreshCw, ExternalLink, History as HistoryIcon, FileText, ListTodo } from 'lucide-react';
+import type { MeetingRow, Specialist, SuggestedTodo } from '../../shared/types';
 import { SPECIALIST_LABELS } from '../../shared/types';
+import { ReviewPanel } from './ReviewPanel';
 
 function stripFrontmatter(md: string): string {
   if (!md.startsWith('---')) return md;
@@ -59,6 +60,8 @@ export function History({ mcUrl }: { mcUrl: string }) {
   const [archiveMd, setArchiveMd] = useState<string | null>(null);
   const [archiveStatus, setArchiveStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<SuggestedTodo[]>([]);
+  const [reviewing, setReviewing] = useState(false);
 
   async function load() {
     setStatus('loading');
@@ -85,11 +88,14 @@ export function History({ mcUrl }: { mcUrl: string }) {
     if (!selected) {
       setArchiveMd(null);
       setArchiveStatus('idle');
+      setSuggestions([]);
+      setReviewing(false);
       return;
     }
     let cancelled = false;
     setArchiveStatus('loading');
     setArchiveError(null);
+    setReviewing(false);
     void (async () => {
       const res = await window.skymark.mc.getArchive(selected.id);
       if (cancelled) return;
@@ -101,6 +107,10 @@ export function History({ mcUrl }: { mcUrl: string }) {
         setArchiveError(res.error);
         setArchiveStatus('error');
       }
+      const sugg = await window.skymark.mc.getSuggestedTodos(selected.id);
+      if (cancelled) return;
+      if (sugg.ok) setSuggestions(sugg.todos);
+      else setSuggestions([]);
     })();
     return () => {
       cancelled = true;
@@ -171,6 +181,42 @@ export function History({ mcUrl }: { mcUrl: string }) {
                 ) : (
                   <p className="help">No summary yet.</p>
                 )}
+
+                {(() => {
+                  const pendingCount = suggestions.filter((s) => s.status === 'suggested').length;
+                  const createdCount = suggestions.filter((s) => s.status === 'created').length;
+                  if (reviewing) {
+                    return (
+                      <ReviewPanel
+                        meetingId={selected.id}
+                        meetingTitle={selected.title || 'Meeting'}
+                        onClose={() => {
+                          setReviewing(false);
+                          // Refresh to reflect changes.
+                          void window.skymark.mc.getSuggestedTodos(selected.id).then((r) => {
+                            if (r.ok) setSuggestions(r.todos);
+                          });
+                        }}
+                      />
+                    );
+                  }
+                  if (pendingCount === 0 && createdCount === 0) return null;
+                  return (
+                    <div className="history-review-cta">
+                      {pendingCount > 0 && (
+                        <button onClick={() => setReviewing(true)}>
+                          <ListTodo size={13} />
+                          <span>Review {pendingCount} pending action{pendingCount === 1 ? '' : 's'}</span>
+                        </button>
+                      )}
+                      {createdCount > 0 && (
+                        <span className="help">
+                          {createdCount} todo{createdCount === 1 ? '' : 's'} already created.
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <div className="archive-section">
                   <div className="archive-header">

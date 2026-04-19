@@ -14,6 +14,7 @@ import { Onboarding } from './Onboarding';
 import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 import { Logo } from './Logo';
 import { History } from './History';
+import { ReviewPanel } from './ReviewPanel';
 import {
   Play,
   Square,
@@ -67,6 +68,9 @@ export function App() {
   const [brief, setBrief] = useState<string | null>(null);
   const [briefStatus, setBriefStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [briefError, setBriefError] = useState<string | null>(null);
+  const [pendingReview, setPendingReview] = useState<
+    { meetingId: string; title: string } | null
+  >(null);
   const activeMeetingIdRef = useRef<string | null>(null);
 
   const saveNotes = useDebouncedCallback((value: string, meetingId: string) => {
@@ -112,6 +116,12 @@ export function App() {
     })();
 
     const offUpdate = window.skymark.updater.onState((s) => setUpdateState(s));
+
+    const offPostMeeting = window.skymark.session.onPostMeetingReady((ev) => {
+      if (ev.suggestedCount === 0) return;
+      setPendingReview({ meetingId: ev.meetingId, title: ev.title });
+      setTab('meeting');
+    });
 
     const offState = window.skymark.session.onState((next) => setSessionState(next));
     const offTranscript = window.skymark.session.onTranscript((ev) => {
@@ -166,6 +176,7 @@ export function App() {
       offNudge();
       offAnswer();
       offUpdate();
+      offPostMeeting();
     };
   }, []);
 
@@ -420,6 +431,14 @@ export function App() {
               </button>
             )}
           </div>
+
+          {pendingReview && (
+            <ReviewPanel
+              meetingId={pendingReview.meetingId}
+              meetingTitle={pendingReview.title}
+              onClose={() => setPendingReview(null)}
+            />
+          )}
 
           {(brief || briefStatus === 'error') && (
             <div className={briefStatus === 'error' ? 'brief-panel error' : 'brief-panel'}>

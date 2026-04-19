@@ -18,6 +18,7 @@ import Store from 'electron-store';
 import type {
   DetectedMeeting,
   Nudge,
+  PostMeetingReadyEvent,
   QuestionAnswer,
   Settings,
   SessionState,
@@ -472,6 +473,76 @@ function registerIpc() {
     }
   });
 
+  ipcMain.handle(
+    'mc:get-suggested-todos',
+    async (_e, meetingId: string) => {
+      const url = store.get('mcUrl') as string | undefined;
+      if (!url) return { ok: false, error: 'MC URL not configured' };
+      try {
+        const res = await fetch(
+          `${url.replace(/\/$/, '')}/api/meetings/${meetingId}/suggested-todos`,
+          { signal: AbortSignal.timeout(8000) },
+        );
+        if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+        const todos = await res.json();
+        return { ok: true, todos };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'mc:approve-suggested-todo',
+    async (
+      _e,
+      meetingId: string,
+      actionId: string,
+      overrides?: { text?: string; owner?: string | null },
+    ) => {
+      const url = store.get('mcUrl') as string | undefined;
+      if (!url) return { ok: false, error: 'MC URL not configured' };
+      try {
+        const res = await fetch(
+          `${url.replace(/\/$/, '')}/api/meetings/${meetingId}/suggested-todos/${actionId}/approve`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(overrides ?? {}),
+            signal: AbortSignal.timeout(5000),
+          },
+        );
+        if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+        const body = (await res.json()) as { todoId?: string };
+        return body.todoId ? { ok: true, todoId: body.todoId } : { ok: false, error: 'No todoId returned' };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'mc:dismiss-suggested-todo',
+    async (_e, meetingId: string, actionId: string) => {
+      const url = store.get('mcUrl') as string | undefined;
+      if (!url) return { ok: false, error: 'MC URL not configured' };
+      try {
+        const res = await fetch(
+          `${url.replace(/\/$/, '')}/api/meetings/${meetingId}/suggested-todos/${actionId}/dismiss`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(5000),
+          },
+        );
+        if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
+
   ipcMain.handle('mc:list-meetings', async (_e, limit: number = 30) => {
     const url = store.get('mcUrl') as string | undefined;
     if (!url) return { ok: false, error: 'MC URL not configured' };
@@ -532,6 +603,28 @@ function wireSessionBroadcast() {
   meeting.on('transcript', (ev: TranscriptEvent) => broadcast('session:transcript', ev));
   meeting.on('nudge', (n: Nudge) => broadcast('session:nudge', n));
   meeting.on('answer', (a: QuestionAnswer) => broadcast('session:answer', a));
+  meeting.on('post-meeting-ready', (ev: PostMeetingReadyEvent) => {
+    broadcast('session:post-meeting-ready', ev);
+    // Also fire an OS-level toast so the user notices even if the window
+    // is in the tray. Clicking the toast brings the main window forward
+    // so the review panel can be opened.
+    if (ev.suggestedCount === 0) return;
+    const notification = new Notification({
+      title: `Review post-meeting actions`,
+      body: `${ev.suggestedCount} suggested todo${ev.suggestedCount === 1 ? '' : 's'} from “${ev.title}” — click to review.`,
+      silent: false,
+    });
+    notification.on('click', () => {
+      if (!mainWindow) return;
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      // Rebroadcast so a window that just came out of the tray still gets
+      // the event if it missed the first fire.
+      broadcast('session:post-meeting-ready', ev);
+    });
+    notification.show();
+  });
 }
 
 // Single-instance lock: second launches focus the existing window instead of

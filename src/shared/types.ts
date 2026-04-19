@@ -79,6 +79,27 @@ export type AskResult =
   | { ok: true; questionId: string }
   | { ok: false; error: string };
 
+export type SuggestedTodoCategory = 'my-action' | 'follow-up' | 'context-only';
+export type SuggestedTodoStatus = 'suggested' | 'approved' | 'dismissed' | 'created';
+
+export type SuggestedTodo = {
+  id: string;
+  text: string;
+  owner: string | null;
+  category: SuggestedTodoCategory;
+  rationale: string | null;
+  dueHint: string | null;
+  status: SuggestedTodoStatus;
+  todoId: string | null;
+  createdAt: string | null;
+};
+
+export type PostMeetingReadyEvent = {
+  meetingId: string;
+  title: string;
+  suggestedCount: number;
+};
+
 export type UpdateState =
   | { phase: 'idle' }
   | { phase: 'checking' }
@@ -107,6 +128,7 @@ export type SkymarkApi = {
     onTranscript: (cb: (ev: TranscriptEvent) => void) => () => void;
     onNudge: (cb: (n: Nudge) => void) => () => void;
     onAnswer: (cb: (a: QuestionAnswer) => void) => () => void;
+    onPostMeetingReady: (cb: (ev: PostMeetingReadyEvent) => void) => () => void;
   };
   window: {
     toggleSidebar: () => Promise<void>;
@@ -123,6 +145,15 @@ export type SkymarkApi = {
       Promise<{ ok: true } | { ok: false; error: string }>;
     requestBrief: (args: { specialist: Specialist; title?: string }) =>
       Promise<{ ok: true; brief: string } | { ok: false; error: string }>;
+    getSuggestedTodos: (meetingId: string) =>
+      Promise<{ ok: true; todos: SuggestedTodo[] } | { ok: false; error: string }>;
+    approveSuggestedTodo: (
+      meetingId: string,
+      actionId: string,
+      overrides?: { text?: string; owner?: string | null },
+    ) => Promise<{ ok: true; todoId: string } | { ok: false; error: string }>;
+    dismissSuggestedTodo: (meetingId: string, actionId: string) =>
+      Promise<{ ok: true } | { ok: false; error: string }>;
   };
   updater: {
     getVersion: () => Promise<string>;
