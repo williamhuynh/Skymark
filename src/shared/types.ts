@@ -154,6 +154,7 @@ export type SkymarkApi = {
     ) => Promise<{ ok: true; todoId: string } | { ok: false; error: string }>;
     dismissSuggestedTodo: (meetingId: string, actionId: string) =>
       Promise<{ ok: true } | { ok: false; error: string }>;
+    consumePendingReview: () => Promise<PostMeetingReadyEvent | null>;
   };
   updater: {
     getVersion: () => Promise<string>;

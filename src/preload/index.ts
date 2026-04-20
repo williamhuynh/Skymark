@@ -79,6 +79,7 @@ const api: SkymarkApi = {
     ) => ipcRenderer.invoke('mc:approve-suggested-todo', meetingId, actionId, overrides),
     dismissSuggestedTodo: (meetingId: string, actionId: string) =>
       ipcRenderer.invoke('mc:dismiss-suggested-todo', meetingId, actionId),
+    consumePendingReview: () => ipcRenderer.invoke('mc:consume-pending-review'),
   },
   updater: {
     getVersion: () => ipcRenderer.invoke('updater:get-version'),

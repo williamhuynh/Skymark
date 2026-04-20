@@ -131,6 +131,20 @@ export function App() {
       setTab('meeting');
     });
 
+    // On mount + every time the window regains focus, ask main if there's a
+    // cached post-meeting-ready event we missed (window was in tray or the
+    // renderer wasn't attached yet when it was broadcast). Main clears it on
+    // read so we don't re-show the review after explicit dismissal.
+    const pullPendingReview = () => {
+      void window.skymark.mc.consumePendingReview().then((ev) => {
+        if (!ev || ev.suggestedCount === 0) return;
+        setPendingReview({ meetingId: ev.meetingId, title: ev.title });
+        setTab('meeting');
+      });
+    };
+    pullPendingReview();
+    window.addEventListener('focus', pullPendingReview);
+
     // When the OS announces a device change (user plugs in earphones, etc.)
     // the existing MediaStream tracks are still pinned to the old device.
     // Flag it so the user can manually refresh — auto-reacquire would drop
@@ -195,6 +209,7 @@ export function App() {
       offAnswer();
       offUpdate();
       offPostMeeting();
+      window.removeEventListener('focus', pullPendingReview);
       navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange);
     };
   }, []);

@@ -544,6 +544,17 @@ function registerIpc() {
     },
   );
 
+  // Renderer calls this on mount (and on window focus) to pick up a
+  // post-meeting-ready event that might have been broadcast while it
+  // wasn't alive yet (minimized-to-tray, just relaunched). Returns null
+  // if no event is pending. Consumes (clears) on read so we don't
+  // re-show the review after the user explicitly dismisses it.
+  ipcMain.handle('mc:consume-pending-review', () => {
+    const ev = pendingPostMeetingReview;
+    pendingPostMeetingReview = null;
+    return ev;
+  });
+
   ipcMain.handle('mc:list-meetings', async (_e, limit: number = 30) => {
     const url = store.get('mcUrl') as string | undefined;
     if (!url) return { ok: false, error: 'MC URL not configured' };
@@ -599,12 +610,19 @@ function registerMediaPermissions() {
   );
 }
 
+// Cached last post-meeting-ready event. Survives a minimized-to-tray
+// renderer that never received the broadcast, or a notification click
+// that lands before the webContents wakes up. Renderer consumes it via
+// `mc:consume-pending-review` on mount/focus.
+let pendingPostMeetingReview: PostMeetingReadyEvent | null = null;
+
 function wireSessionBroadcast() {
   meeting.on('state', (state: SessionState) => broadcast('session:state', state));
   meeting.on('transcript', (ev: TranscriptEvent) => broadcast('session:transcript', ev));
   meeting.on('nudge', (n: Nudge) => broadcast('session:nudge', n));
   meeting.on('answer', (a: QuestionAnswer) => broadcast('session:answer', a));
   meeting.on('post-meeting-ready', (ev: PostMeetingReadyEvent) => {
+    pendingPostMeetingReview = ev;
     broadcast('session:post-meeting-ready', ev);
     // Also fire an OS-level toast so the user notices even if the window
     // is in the tray. Clicking the toast brings the main window forward
@@ -621,7 +639,8 @@ function wireSessionBroadcast() {
       mainWindow.show();
       mainWindow.focus();
       // Rebroadcast so a window that just came out of the tray still gets
-      // the event if it missed the first fire.
+      // the event if it missed the first fire. If the renderer is still
+      // warming up, it'll pull the cached event via consume-pending-review.
       broadcast('session:post-meeting-ready', ev);
     });
     notification.show();
