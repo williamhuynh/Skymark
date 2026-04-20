@@ -16,7 +16,10 @@ import type {
 } from '../../shared/types';
 
 const POST_MEETING_POLL_INTERVAL_MS = 5_000;
-const POST_MEETING_POLL_TIMEOUT_MS = 3 * 60_000;
+// Specialists can take 10+ min for long meetings (aid-coo's real Westpac
+// summary ran ~12 min). Give the full window + a buffer; poll cost is
+// negligible compared with missing the review toast entirely.
+const POST_MEETING_POLL_TIMEOUT_MS = 15 * 60_000;
 
 const BACKOFFS_MS = [2_000, 4_000, 8_000, 16_000, 30_000];
 

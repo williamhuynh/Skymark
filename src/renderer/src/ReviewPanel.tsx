@@ -23,7 +23,11 @@ export function ReviewPanel({ meetingId, meetingTitle, onClose }: Props) {
   const [selection, setSelection] = useState<SelectionState>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ approved: number; dismissed: number } | null>(null);
+  const [result, setResult] = useState<{
+    approved: number;
+    dismissed: number;
+    failures: Array<{ text: string; error: string }>;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +76,7 @@ export function ReviewPanel({ meetingId, meetingTitle, onClose }: Props) {
     setResult(null);
     let approved = 0;
     let dismissed = 0;
+    const failures: Array<{ text: string; error: string }> = [];
     for (const t of pending) {
       const sel = selection[t.id];
       if (sel?.selected) {
@@ -81,12 +86,14 @@ export function ReviewPanel({ meetingId, meetingTitle, onClose }: Props) {
             : undefined;
         const r = await window.skymark.mc.approveSuggestedTodo(meetingId, t.id, override);
         if (r.ok) approved++;
+        else failures.push({ text: t.text, error: r.error ?? 'approve failed' });
       } else {
         const r = await window.skymark.mc.dismissSuggestedTodo(meetingId, t.id);
         if (r.ok) dismissed++;
+        else failures.push({ text: t.text, error: r.error ?? 'dismiss failed' });
       }
     }
-    setResult({ approved, dismissed });
+    setResult({ approved, dismissed, failures });
     setSubmitting(false);
   }
 
@@ -106,11 +113,12 @@ export function ReviewPanel({ meetingId, meetingTitle, onClose }: Props) {
   }
 
   if (result) {
+    const hasFailures = result.failures.length > 0;
     return (
-      <div className="review-panel success">
+      <div className={`review-panel ${hasFailures ? 'error' : 'success'}`}>
         <div className="review-header">
-          <CheckCircle2 size={14} />
-          <span>Review complete</span>
+          {hasFailures ? <CircleAlert size={14} /> : <CheckCircle2 size={14} />}
+          <span>{hasFailures ? 'Review finished with errors' : 'Review complete'}</span>
           <button className="ghost review-close" onClick={onClose}>
             <X size={13} />
           </button>
@@ -118,16 +126,32 @@ export function ReviewPanel({ meetingId, meetingTitle, onClose }: Props) {
         <p className="help">
           {result.approved > 0 && (
             <>
-              <strong>{result.approved}</strong> todo{result.approved === 1 ? '' : 's'} created
-              {result.dismissed > 0 ? ' · ' : '.'}
+              <strong>{result.approved}</strong> created
+              {(result.dismissed > 0 || hasFailures) ? ' · ' : '.'}
             </>
           )}
           {result.dismissed > 0 && (
             <>
-              <strong>{result.dismissed}</strong> dismissed.
+              <strong>{result.dismissed}</strong> dismissed
+              {hasFailures ? ' · ' : '.'}
+            </>
+          )}
+          {hasFailures && (
+            <>
+              <strong>{result.failures.length}</strong> failed.
             </>
           )}
         </p>
+        {hasFailures && (
+          <ul className="review-failures">
+            {result.failures.map((f, i) => (
+              <li key={i}>
+                <span className="review-failure-text">{f.text}</span>
+                <span className="review-failure-err">{f.error}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     );
   }

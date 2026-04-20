@@ -749,6 +749,35 @@ footer {
   margin-top: var(--space-1);
 }
 
+.review-failures {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-2) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--size-xs);
+}
+
+.review-failures li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-surface-1);
+  border-left: 2px solid var(--danger);
+  border-radius: var(--radius-sm);
+}
+
+.review-failure-text {
+  color: var(--text);
+}
+
+.review-failure-err {
+  color: var(--danger);
+  font-family: var(--font-mono, monospace);
+}
+
 .brief-panel {
   padding: var(--space-3);
   background: var(--bg-surface-1);
