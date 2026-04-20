@@ -27,6 +27,8 @@ import {
   Download,
   RefreshCw,
   Lightbulb,
+  Mic,
+  Volume2,
 } from 'lucide-react';
 import type { UpdateState } from '../../shared/types';
 
@@ -71,6 +73,12 @@ export function App() {
   const [pendingReview, setPendingReview] = useState<
     { meetingId: string; title: string } | null
   >(null);
+  const [audioSources, setAudioSources] = useState<{ mic: string | null; system: string | null }>({
+    mic: null,
+    system: null,
+  });
+  const [devicesChanged, setDevicesChanged] = useState(false);
+  const [refreshingAudio, setRefreshingAudio] = useState(false);
   const activeMeetingIdRef = useRef<string | null>(null);
 
   const saveNotes = useDebouncedCallback((value: string, meetingId: string) => {
@@ -122,6 +130,16 @@ export function App() {
       setPendingReview({ meetingId: ev.meetingId, title: ev.title });
       setTab('meeting');
     });
+
+    // When the OS announces a device change (user plugs in earphones, etc.)
+    // the existing MediaStream tracks are still pinned to the old device.
+    // Flag it so the user can manually refresh — auto-reacquire would drop
+    // a chunk or two of audio without warning, which feels worse than a
+    // "Refresh audio" button they control.
+    const onDeviceChange = () => {
+      if (captureRef.current) setDevicesChanged(true);
+    };
+    navigator.mediaDevices.addEventListener('devicechange', onDeviceChange);
 
     const offState = window.skymark.session.onState((next) => setSessionState(next));
     const offTranscript = window.skymark.session.onTranscript((ev) => {
@@ -177,6 +195,7 @@ export function App() {
       offAnswer();
       offUpdate();
       offPostMeeting();
+      navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange);
     };
   }, []);
 
@@ -247,12 +266,34 @@ export function App() {
         },
       });
       captureRef.current = handle;
+      setAudioSources(handle.getSources());
+      setDevicesChanged(false);
     } catch (err) {
       await window.skymark.session.stop();
       setSessionState({
         phase: 'error',
         message: err instanceof Error ? err.message : String(err),
       });
+    }
+  }
+
+  async function refreshAudio() {
+    if (!captureRef.current || refreshingAudio) return;
+    setRefreshingAudio(true);
+    try {
+      await captureRef.current.stop();
+      captureRef.current = null;
+      const handle = await startAudioCapture({
+        onChunk: (pcm) => window.skymark.session.sendAudio(pcm),
+        onError: (err) => console.error('[audio] error:', err),
+      });
+      captureRef.current = handle;
+      setAudioSources(handle.getSources());
+      setDevicesChanged(false);
+    } catch (err) {
+      console.error('[audio] refresh failed:', err);
+    } finally {
+      setRefreshingAudio(false);
     }
   }
 
@@ -462,6 +503,30 @@ export function App() {
           )}
 
           <StatusBar state={sessionState} linked={mcLinked && isActive} />
+
+          {isActive && (audioSources.mic || audioSources.system) && (
+            <div className={`audio-sources${devicesChanged ? ' changed' : ''}`}>
+              <span className="audio-source" title={audioSources.mic ?? 'No mic'}>
+                <Mic size={12} />
+                <span className="audio-source-name">{audioSources.mic ?? '—'}</span>
+              </span>
+              <span className="audio-source" title={audioSources.system ?? 'No system audio'}>
+                <Volume2 size={12} />
+                <span className="audio-source-name">{audioSources.system ?? '—'}</span>
+              </span>
+              {devicesChanged && (
+                <button
+                  className="ghost audio-refresh"
+                  onClick={() => void refreshAudio()}
+                  disabled={refreshingAudio}
+                  title="Audio devices changed. Click to re-acquire the current mic + system audio."
+                >
+                  <RefreshCw size={12} className={refreshingAudio ? 'spinning' : ''} />
+                  <span>{refreshingAudio ? 'Refreshing…' : 'Audio changed — refresh'}</span>
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="two-col">
             <TranscriptView

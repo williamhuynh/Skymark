@@ -5,6 +5,7 @@ import {
   Menu,
   nativeImage,
   Notification,
+  powerMonitor,
   safeStorage,
   shell,
   ipcMain,
@@ -666,6 +667,21 @@ app.whenReady().then(() => {
   detector.on('ended', () => {
     // No UI hook yet — the detector's own state clears, next detection can trigger again.
   });
+
+  // Graceful stop when the system is about to sleep. Laptop-lid-close is the
+  // most common way a meeting gets orphaned with `status: active` in MC —
+  // user never hits Stop, audio stops flowing, nothing closes the meeting.
+  // Firing meeting.stop() here posts /end and triggers post-meeting delegate
+  // before the OS cuts the process.
+  const attemptPowerStop = (reason: string) => {
+    const phase = meeting.getState().phase;
+    if (phase === 'idle' || phase === 'error') return;
+    log.info(`[power] ${reason} — attempting clean meeting stop`);
+    void meeting.stop().catch((err) => log.warn(`[power] ${reason} stop failed:`, err));
+  };
+  powerMonitor.on('suspend', () => attemptPowerStop('system suspending'));
+  powerMonitor.on('lock-screen', () => attemptPowerStop('screen locked'));
+  powerMonitor.on('shutdown', () => attemptPowerStop('system shutting down'));
 });
 
 let shuttingDown = false;

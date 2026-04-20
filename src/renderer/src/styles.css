@@ -144,8 +144,7 @@ a:hover {
   display: flex;
   flex-direction: column;
   height: 100%;
-  max-width: 720px;
-  margin: 0 auto;
+  width: 100%;
   padding: 0;
 }
 
@@ -323,6 +322,46 @@ footer {
   border-radius: var(--radius-pill);
   font-size: var(--size-xs);
   font-weight: 500;
+}
+
+.audio-sources {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  background: var(--bg-surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--size-xs);
+  color: var(--text-muted);
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+
+.audio-sources.changed {
+  border-color: var(--warning);
+  background: var(--warning-muted);
+  color: var(--text-secondary);
+}
+
+.audio-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 240px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.audio-source-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audio-refresh {
+  margin-left: auto;
+  padding: 2px var(--space-2);
+  font-size: var(--size-xs);
 }
 
 @keyframes pulse {

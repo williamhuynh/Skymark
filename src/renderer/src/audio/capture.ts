@@ -11,6 +11,7 @@
 
 export type AudioCaptureHandle = {
   stop: () => Promise<void>;
+  getSources: () => { mic: string | null; system: string | null };
 };
 
 export type AudioCaptureCallbacks = {
@@ -185,6 +186,14 @@ export async function startAudioCapture(
       }
       await ctx.close();
       console.info('[audio] capture stopped; total chunks:', chunkCount);
+    },
+    getSources() {
+      // Labels only populate after permission is granted. Fall back to empty
+      // strings rather than null-confusing the UI.
+      return {
+        mic: micStream?.getAudioTracks()[0]?.label ?? null,
+        system: systemStream?.getAudioTracks()[0]?.label ?? null,
+      };
     },
   };
 }
