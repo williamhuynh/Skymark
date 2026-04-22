@@ -46,6 +46,10 @@ export type StartSessionArgs = {
   keyterms?: string[];
   title?: string;
   platform?: MeetingPlatform;
+  // Sample rate (Hz) of the PCM the renderer will stream. Detected via a
+  // probe AudioContext so Deepgram gets the truth and no JS resampling is
+  // needed. Defaults to 48000 if omitted.
+  sampleRate?: number;
 };
 
 export type DetectedMeeting = {

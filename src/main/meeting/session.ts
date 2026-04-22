@@ -32,6 +32,7 @@ export class MeetingSession extends EventEmitter {
   private wantsActive = false;
   private apiKey: string | null = null;
   private keyterms: string[] | null = null;
+  private sampleRate: number = 48000;
   private reconnectTimers: Map<string, NodeJS.Timeout> = new Map();
   private reconnectAttempts: Map<string, number> = new Map();
   private postMeetingWatcher: AbortController | null = null;
@@ -80,6 +81,10 @@ export class MeetingSession extends EventEmitter {
     this.wantsActive = true;
     this.apiKey = apiKey;
     this.keyterms = null; // Set after MC load below (if specialist != 'none').
+    // Renderer probes the device rate and passes it in; Deepgram is told the
+    // truth so no JS resampling is needed. Default to 48k if absent.
+    this.sampleRate = args.sampleRate && args.sampleRate > 0 ? args.sampleRate : 48000;
+    log.info(`[session] sample rate for Deepgram: ${this.sampleRate}Hz`);
 
     // Always create an MC meeting so the transcript is persisted, even for
     // 'none' specialist. Subscribe WS + specialist-wake plumbing is only
@@ -153,6 +158,7 @@ export class MeetingSession extends EventEmitter {
     const client = new DeepgramClient({
       apiKey: this.apiKey ?? '',
       keyterms: this.keyterms ?? [],
+      sampleRate: this.sampleRate,
     });
     client.on('transcript', (ev: TranscriptEvent) => {
       this.emit('transcript', ev);

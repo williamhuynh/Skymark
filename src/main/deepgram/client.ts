@@ -51,11 +51,13 @@ export class DeepgramClient extends EventEmitter {
   async connect(): Promise<void> {
     const params = new URLSearchParams({
       model: 'nova-3',
+      language: 'en-AU',
       diarize: 'true',
       punctuate: 'true',
       smart_format: 'true',
       interim_results: 'true',
       endpointing: '500',
+      numerals: 'true',
       encoding: 'linear16',
       sample_rate: String(this.sampleRate),
       channels: '1',

@@ -8,7 +8,11 @@ import type {
   QuestionAnswer,
 } from '../../shared/types';
 import { SPECIALIST_LABELS } from '../../shared/types';
-import { startAudioCapture, type AudioCaptureHandle } from './audio/capture';
+import {
+  probeSampleRate,
+  startAudioCapture,
+  type AudioCaptureHandle,
+} from './audio/capture';
 import { TranscriptView } from './TranscriptView';
 import { Onboarding } from './Onboarding';
 import { useDebouncedCallback } from './hooks/useDebouncedCallback';
@@ -261,9 +265,19 @@ export function App() {
       hour: '2-digit',
       minute: '2-digit',
     })}`;
+    // Probe device sample rate before starting the session so Deepgram gets
+    // told the truth (prevents JS resampling + aliasing). Fall back to 48k
+    // if the probe throws for any reason.
+    let sampleRate = 48000;
+    try {
+      sampleRate = await probeSampleRate();
+    } catch (err) {
+      console.warn('[audio] probeSampleRate failed, defaulting to 48000:', err);
+    }
     const result = await window.skymark.session.start({
       specialist: pickedSpecialist,
       title: trimmedTitle || defaultTitle,
+      sampleRate,
     });
     if (!result.ok) {
       setSessionState({ phase: 'error', message: result.error });

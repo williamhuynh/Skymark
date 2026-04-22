@@ -3,15 +3,20 @@
  *
  * Pulls system audio via Electron's desktopCapturer (auto-picked loopback)
  * and mic via getUserMedia, mixes them through the Web Audio API, and
- * emits 16 kHz mono Int16 PCM chunks to the caller.
+ * emits native-rate mono Int16 PCM chunks to the caller.
  *
- * Chunks are sent at ~100 ms cadence (1600 samples @ 16 kHz). Main
- * forwards them as-is to the Deepgram WebSocket.
+ * No JS resampling: Deepgram is told the actual rate (via StartSessionArgs)
+ * and accepts it natively. Avoids aliasing from naive linear interpolation
+ * and saves CPU. The session probes the rate via probeSampleRate() before
+ * session.start() so main knows what to tell Deepgram.
+ *
+ * Chunks are sent at ~100 ms cadence. Main forwards them as-is.
  */
 
 export type AudioCaptureHandle = {
   stop: () => Promise<void>;
   getSources: () => { mic: string | null; system: string | null };
+  sampleRate: number;
 };
 
 export type AudioCaptureCallbacks = {
@@ -19,8 +24,18 @@ export type AudioCaptureCallbacks = {
   onError: (err: Error) => void;
 };
 
-const TARGET_SAMPLE_RATE = 16000;
 const CHUNK_MS = 100;
+
+/**
+ * Probe the device's native sample rate without starting full capture.
+ * Call before session.start() so Deepgram gets the correct rate.
+ */
+export async function probeSampleRate(): Promise<number> {
+  const ctx = new AudioContext();
+  const rate = ctx.sampleRate;
+  await ctx.close();
+  return rate;
+}
 
 async function getSystemAudioStream(): Promise<MediaStream | null> {
   try {
@@ -50,6 +65,7 @@ async function getMicStream(): Promise<MediaStream | null> {
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
+        autoGainControl: true,
         channelCount: 1,
       },
     });
@@ -75,21 +91,10 @@ export async function startAudioCapture(
     throw new Error('No audio sources available — grant mic and/or screen-audio permission');
   }
 
-  // Create the AudioContext. Chromium may or may not honour the requested
-  // sampleRate; resamples to device rate if not. We check the actual value
-  // and log any mismatch so debugging is fast when transcripts look off.
-  let ctx: AudioContext;
-  try {
-    ctx = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
-  } catch (err) {
-    console.warn('[audio] AudioContext(16k) failed, falling back to default:', err);
-    ctx = new AudioContext();
-  }
-  if (ctx.sampleRate !== TARGET_SAMPLE_RATE) {
-    console.warn(
-      `[audio] context sample rate is ${ctx.sampleRate}Hz, not ${TARGET_SAMPLE_RATE}Hz — resampling in JS`,
-    );
-  }
+  // Use the device's native sample rate. Deepgram accepts any rate up to
+  // 48 kHz; sending native avoids the aliasing caused by naive JS
+  // downsampling.
+  const ctx = new AudioContext();
   if (ctx.state === 'suspended') {
     await ctx.resume();
   }
@@ -116,14 +121,13 @@ export async function startAudioCapture(
   silentSink.gain.value = 0;
   silentSink.connect(ctx.destination);
 
-  const ratio = TARGET_SAMPLE_RATE / ctx.sampleRate;
   const spBufferSize = 4096;
   const processor = ctx.createScriptProcessor(spBufferSize, 1, 1);
   mixer.connect(processor);
   processor.connect(silentSink);
 
-  const targetFrameSamples = Math.round((TARGET_SAMPLE_RATE * CHUNK_MS) / 1000); // 1600 @16k
-  let resampleLeftover = new Float32Array(0);
+  // Re-chunk to ~100 ms frames at the native rate (e.g. 4800 samples @ 48 kHz).
+  const targetFrameSamples = Math.round((ctx.sampleRate * CHUNK_MS) / 1000);
   let pendingTarget = new Float32Array(0);
   let chunkCount = 0;
 
@@ -131,34 +135,9 @@ export async function startAudioCapture(
     try {
       const input = event.inputBuffer.getChannelData(0);
 
-      // Resample from ctx.sampleRate → 16 kHz using simple linear interpolation.
-      // Low CPU cost; quality is fine for ASR on speech.
-      let resampled: Float32Array;
-      if (ratio === 1) {
-        resampled = input;
-      } else {
-        const combined = new Float32Array(resampleLeftover.length + input.length);
-        combined.set(resampleLeftover);
-        combined.set(input, resampleLeftover.length);
-
-        const outLen = Math.floor(combined.length * ratio);
-        resampled = new Float32Array(outLen);
-        for (let i = 0; i < outLen; i++) {
-          const srcIdx = i / ratio;
-          const i0 = Math.floor(srcIdx);
-          const i1 = Math.min(i0 + 1, combined.length - 1);
-          const frac = srcIdx - i0;
-          resampled[i] = combined[i0] * (1 - frac) + combined[i1] * frac;
-        }
-
-        const consumedSrc = Math.floor(outLen / ratio);
-        resampleLeftover = combined.slice(consumedSrc);
-      }
-
-      // Re-chunk to fixed 100ms frames at 16 kHz.
-      const merged = new Float32Array(pendingTarget.length + resampled.length);
+      const merged = new Float32Array(pendingTarget.length + input.length);
       merged.set(pendingTarget);
-      merged.set(resampled, pendingTarget.length);
+      merged.set(input, pendingTarget.length);
 
       const fullFrames = Math.floor(merged.length / targetFrameSamples);
       for (let i = 0; i < fullFrames; i++) {
@@ -176,6 +155,7 @@ export async function startAudioCapture(
   };
 
   return {
+    sampleRate: ctx.sampleRate,
     async stop() {
       processor.disconnect();
       silentSink.disconnect();
