@@ -19,6 +19,7 @@ import type {
   SessionState,
   StartSessionArgs,
   TranscriptEvent,
+  TranscriptRecord,
 } from '../../shared/types';
 
 const POST_MEETING_POLL_INTERVAL_MS = 5_000;
@@ -173,15 +174,16 @@ export class MeetingSession extends EventEmitter {
       sampleRate: this.sampleRate,
     });
     client.on('transcript', (ev: TranscriptEvent) => {
+      // Light event for the renderer — keep IPC payload small.
       this.emit('transcript', ev);
-      if (ev.isFinal) {
-        // Persist FIRST so the local write-ahead log is complete even if MC
-        // is unreachable or we crash before flushing to WS. Fire-and-forget —
-        // the append function serializes writes internally and swallows errors.
-        if (this.meeting) {
-          void appendTranscriptEvent(this.meeting.id, ev);
-        }
-        if (this.mc) this.mc.sendTranscript(ev);
+      if (ev.isFinal && this.mc) this.mc.sendTranscript(ev);
+    });
+    client.on('record', (rec: TranscriptRecord) => {
+      // Rich record (words, entities, paragraphs, confidence) persisted to
+      // disk only. Written FIRST so the write-ahead log is complete even if
+      // MC is unreachable or we crash before flushing to WS.
+      if (this.meeting) {
+        void appendTranscriptEvent(this.meeting.id, rec);
       }
     });
     client.on('ws-error', (err: Error) => {

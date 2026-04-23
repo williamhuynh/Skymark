@@ -21,6 +21,36 @@ export type TranscriptEvent = {
   isFinal: boolean;
 };
 
+// Richer record persisted to the on-disk JSONL per final utterance. Contains
+// the raw per-word and entity data Deepgram returns so future LLM extraction
+// pipelines can work off ground truth (exact timestamps, speakers per word,
+// Deepgram-detected entities/measurements) rather than re-parsing prose.
+export type TranscriptWord = {
+  word: string;
+  punctuated_word?: string;
+  start: number;
+  end: number;
+  speaker?: number;
+  confidence?: number;
+};
+
+export type TranscriptEntity = {
+  label: string;
+  value: string;
+  confidence?: number;
+  start_word?: number;
+  end_word?: number;
+};
+
+export type TranscriptRecord = TranscriptEvent & {
+  words?: TranscriptWord[];
+  entities?: TranscriptEntity[];
+  // Deepgram's paragraph metadata when `paragraphs=true`. Pass-through shape.
+  paragraphs?: unknown;
+  // Top-level confidence reported by Deepgram for this alternative.
+  confidence?: number;
+};
+
 export type SessionState =
   | { phase: 'idle' }
   | { phase: 'connecting' }

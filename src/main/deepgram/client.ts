@@ -1,7 +1,12 @@
 import { WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
 import log from 'electron-log/main.js';
-import type { TranscriptEvent } from '../../shared/types';
+import type {
+  TranscriptEntity,
+  TranscriptEvent,
+  TranscriptRecord,
+  TranscriptWord,
+} from '../../shared/types';
 
 const CONNECT_TIMEOUT_MS = 10_000;
 const KEEPALIVE_INTERVAL_MS = 5_000;
@@ -14,13 +19,10 @@ export type DeepgramClientOptions = {
 
 type DeepgramAlternative = {
   transcript: string;
-  words?: Array<{
-    word: string;
-    start: number;
-    end: number;
-    speaker?: number;
-    punctuated_word?: string;
-  }>;
+  confidence?: number;
+  words?: TranscriptWord[];
+  entities?: TranscriptEntity[];
+  paragraphs?: unknown;
 };
 
 type DeepgramResult = {
@@ -56,8 +58,16 @@ export class DeepgramClient extends EventEmitter {
       punctuate: 'true',
       smart_format: 'true',
       interim_results: 'true',
-      endpointing: '500',
+      // 1000ms: longer context window → better word accuracy, punctuation,
+      // and diarization confidence. Finals arrive ~500ms later than at 500ms
+      // but live latency isn't a concern; archives are the consumer.
+      endpointing: '1000',
       numerals: 'true',
+      // Extraction-oriented enrichments. All computed server-side by Deepgram
+      // and returned in the Results payload — no extra local cost.
+      paragraphs: 'true',
+      detect_entities: 'true',
+      measurements: 'true',
       encoding: 'linear16',
       sample_rate: String(this.sampleRate),
       channels: '1',
@@ -152,14 +162,30 @@ export class DeepgramClient extends EventEmitter {
 
     const startMs = Math.round((msg.start ?? 0) * 1000);
     const durationMs = Math.round((msg.duration ?? 0) * 1000);
+    const isFinal = Boolean(msg.is_final);
     const ev: TranscriptEvent = {
       speaker,
       text: alt.transcript,
       startMs,
       endMs: startMs + durationMs,
-      isFinal: Boolean(msg.is_final),
+      isFinal,
     };
+    // Light event for IPC → renderer (minimal payload).
     this.emit('transcript', ev);
+
+    // Rich record for on-disk persistence. Only emit on finals so we don't
+    // flood the disk with every interim refinement. Contains per-word data,
+    // entities, paragraphs, confidence — whatever Deepgram returned.
+    if (isFinal) {
+      const record: TranscriptRecord = {
+        ...ev,
+        words: alt.words,
+        entities: alt.entities,
+        paragraphs: alt.paragraphs,
+        confidence: alt.confidence,
+      };
+      this.emit('record', record);
+    }
   }
 
   private wsSendCount = 0;

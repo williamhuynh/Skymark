@@ -17,7 +17,7 @@ import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { log } from '../log';
-import type { TranscriptEvent } from '../../shared/types';
+import type { TranscriptEvent, TranscriptRecord } from '../../shared/types';
 
 function meetingsDir(): string {
   return path.join(app.getPath('userData'), 'meetings');
@@ -33,7 +33,7 @@ let writeChain: Promise<void> = Promise.resolve();
 
 export function appendTranscriptEvent(
   meetingId: string,
-  ev: TranscriptEvent,
+  ev: TranscriptEvent | TranscriptRecord,
 ): Promise<void> {
   const target = transcriptLogPath(meetingId);
   const line = JSON.stringify(ev) + '\n';
@@ -52,7 +52,7 @@ export function appendTranscriptEvent(
 
 export async function readTranscriptEvents(
   meetingId: string,
-): Promise<TranscriptEvent[]> {
+): Promise<TranscriptRecord[]> {
   const target = transcriptLogPath(meetingId);
   let raw: string;
   try {
@@ -61,11 +61,11 @@ export async function readTranscriptEvents(
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw err;
   }
-  const out: TranscriptEvent[] = [];
+  const out: TranscriptRecord[] = [];
   for (const line of raw.split('\n')) {
     if (!line) continue;
     try {
-      out.push(JSON.parse(line) as TranscriptEvent);
+      out.push(JSON.parse(line) as TranscriptRecord);
     } catch {
       // Skip corrupt lines (e.g. partial write from a crash) — don't block
       // the whole file over one bad record.
