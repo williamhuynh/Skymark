@@ -1,9 +1,13 @@
 import { WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
+import log from 'electron-log/main.js';
 import type { Nudge, QuestionAnswer, Specialist, TranscriptEvent } from '../../shared/types';
 
 const HTTP_TIMEOUT_MS = 10_000;
 const WS_PING_INTERVAL_MS = 30_000;
+// Cap the replay queue so a long MC outage can't eat renderer memory.
+// At ~5 final events/sec worst case, 2000 ≈ 6–7 minutes of buffered transcript.
+const MAX_QUEUE = 2000;
 
 export type MCClientOptions = {
   baseUrl: string;
@@ -30,6 +34,10 @@ export class MCClient extends EventEmitter {
   private subscribeWs: WebSocket | null = null;
   private subscribePing: NodeJS.Timeout | null = null;
   private closed = false;
+  // Transcript frames that arrived while the stream WS was offline. Flushed
+  // in FIFO order once the next WS opens. Bounded at MAX_QUEUE; oldest drops.
+  private pendingTranscripts: TranscriptEvent[] = [];
+  private droppedTranscripts = 0;
 
   constructor(opts: MCClientOptions) {
     super();
@@ -90,6 +98,7 @@ export class MCClient extends EventEmitter {
           try { ws.ping(); } catch { /* ignore */ }
         }
       }, WS_PING_INTERVAL_MS);
+      this.flushPendingTranscripts();
     });
     ws.on('error', (err) => this.emit('error', err));
     ws.on('close', (code, reason) => {
@@ -106,9 +115,112 @@ export class MCClient extends EventEmitter {
 
   sendTranscript(ev: TranscriptEvent): void {
     const ws = this.streamWs;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      // Buffer for replay when the stream WS reopens. Reconciliation on
+      // meeting stop is the backstop if we exceed MAX_QUEUE or never reconnect.
+      if (this.pendingTranscripts.length >= MAX_QUEUE) {
+        this.pendingTranscripts.shift();
+        this.droppedTranscripts++;
+      }
+      this.pendingTranscripts.push(ev);
+      return;
+    }
     const frame = { type: 'transcript', ...ev };
     ws.send(JSON.stringify(frame));
+  }
+
+  private flushPendingTranscripts(): void {
+    const ws = this.streamWs;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (this.pendingTranscripts.length === 0) return;
+    const count = this.pendingTranscripts.length;
+    log.info(
+      `[mc] flushing ${count} queued transcript frame(s)` +
+        (this.droppedTranscripts > 0 ? ` (lost ${this.droppedTranscripts} to queue cap)` : ''),
+    );
+    const queued = this.pendingTranscripts;
+    this.pendingTranscripts = [];
+    this.droppedTranscripts = 0;
+    for (const ev of queued) {
+      try {
+        ws.send(JSON.stringify({ type: 'transcript', ...ev }));
+      } catch (err) {
+        log.warn('[mc] flush send failed, re-queueing:', err);
+        this.pendingTranscripts.push(ev);
+      }
+    }
+  }
+
+  /**
+   * End-of-meeting safety net. Diffs the caller-supplied local transcript
+   * against what MC currently has and POSTs any missing events via the REST
+   * backup endpoint. Dedupe key is (startMs, text) — Deepgram's startMs is
+   * derived from the audio clock so the value is stable end-to-end.
+   *
+   * Best-effort: failures are reported in the return value, not thrown, so
+   * a flaky network at Stop doesn't break session shutdown.
+   */
+  async reconcileTranscript(
+    meetingId: string,
+    local: TranscriptEvent[],
+  ): Promise<{ sent: number; failed: number; gap: number; mcHad: number }> {
+    if (local.length === 0) return { sent: 0, failed: 0, gap: 0, mcHad: 0 };
+
+    const base = httpBase(this.baseUrl);
+    let mcRows: Array<{ start_ms: number | null; text: string }> = [];
+    try {
+      const res = await fetch(
+        `${base}/api/meetings/${meetingId}/transcript?limit=2000`,
+        { signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) },
+      );
+      if (!res.ok) {
+        log.warn(`[mc] reconcile GET failed: HTTP ${res.status}`);
+        return { sent: 0, failed: local.length, gap: local.length, mcHad: 0 };
+      }
+      mcRows = (await res.json()) as typeof mcRows;
+    } catch (err) {
+      log.warn('[mc] reconcile GET threw:', err);
+      return { sent: 0, failed: local.length, gap: local.length, mcHad: 0 };
+    }
+
+    const seen = new Set<string>();
+    for (const row of mcRows) seen.add(`${row.start_ms ?? 0}:${row.text}`);
+
+    const missing = local.filter(
+      (ev) => !seen.has(`${ev.startMs}:${ev.text}`),
+    );
+    if (missing.length === 0) {
+      return { sent: 0, failed: 0, gap: 0, mcHad: mcRows.length };
+    }
+
+    log.info(
+      `[mc] reconciling ${missing.length} event(s) missing on MC (mcHad=${mcRows.length}, local=${local.length})`,
+    );
+
+    let sent = 0;
+    let failed = 0;
+    for (const ev of missing) {
+      try {
+        const res = await fetch(`${base}/api/meetings/${meetingId}/transcript`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            speaker: ev.speaker,
+            text: ev.text,
+            startMs: ev.startMs,
+            endMs: ev.endMs,
+            isFinal: ev.isFinal,
+          }),
+          signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+        });
+        if (res.ok) sent++;
+        else failed++;
+      } catch {
+        failed++;
+      }
+    }
+    log.info(`[mc] reconcile complete: sent=${sent} failed=${failed} gap=${missing.length}`);
+    return { sent, failed, gap: missing.length, mcHad: mcRows.length };
   }
 
   openSubscribe(meetingId: string): void {

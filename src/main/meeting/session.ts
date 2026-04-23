@@ -4,6 +4,12 @@ import type Store from 'electron-store';
 import { DeepgramClient } from '../deepgram/client';
 import { MCClient } from '../mc/client';
 import { log } from '../log';
+import {
+  appendTranscriptEvent,
+  pruneOldTranscripts,
+  readTranscriptEvents,
+  transcriptLogPath,
+} from './transcript-log';
 import type {
   AskResult,
   MeetingInfo,
@@ -151,6 +157,12 @@ export class MeetingSession extends EventEmitter {
     this.mc = mc;
     this.meeting = { id: meetingId, specialist: args.specialist, startedAt: Date.now() };
     this.setState({ phase: 'listening', startedAt: Date.now() });
+    log.info(
+      `[session] write-ahead log path: ${transcriptLogPath(meetingId)}`,
+    );
+    // Opportunistic cleanup: drop meeting dirs older than 30 days.
+    // Fire-and-forget; failures logged inside the helper.
+    void pruneOldTranscripts(30);
     return { ok: true, meeting: this.meeting ?? undefined };
   }
 
@@ -162,7 +174,15 @@ export class MeetingSession extends EventEmitter {
     });
     client.on('transcript', (ev: TranscriptEvent) => {
       this.emit('transcript', ev);
-      if (ev.isFinal && this.mc) this.mc.sendTranscript(ev);
+      if (ev.isFinal) {
+        // Persist FIRST so the local write-ahead log is complete even if MC
+        // is unreachable or we crash before flushing to WS. Fire-and-forget —
+        // the append function serializes writes internally and swallows errors.
+        if (this.meeting) {
+          void appendTranscriptEvent(this.meeting.id, ev);
+        }
+        if (this.mc) this.mc.sendTranscript(ev);
+      }
     });
     client.on('ws-error', (err: Error) => {
       log.warn('[deepgram] post-connect error:', err);
@@ -301,7 +321,26 @@ export class MeetingSession extends EventEmitter {
     const endedMeeting = this.meeting;
     const mcUrl = this.store.get('mcUrl') as string | undefined;
 
+    // End-of-meeting reconciliation. Read the local JSONL (the ground truth)
+    // and push any events MC missed. Must run BEFORE endMeeting() so the
+    // archive + specialist post-processing see the complete transcript.
     if (this.mc && this.meeting) {
+      try {
+        const local = await readTranscriptEvents(this.meeting.id);
+        const result = await this.mc.reconcileTranscript(this.meeting.id, local);
+        if (result.gap > 0) {
+          log.info(
+            `[session] reconcile: mcHad=${result.mcHad} local=${local.length} ` +
+              `gap=${result.gap} sent=${result.sent} failed=${result.failed}`,
+          );
+        } else {
+          log.info(
+            `[session] reconcile clean: mcHad=${result.mcHad} local=${local.length}`,
+          );
+        }
+      } catch (err) {
+        log.warn('[session] reconcile threw; continuing shutdown:', err);
+      }
       await this.mc.endMeeting(this.meeting.id);
       this.mc.close();
       this.mc = null;
