@@ -50,6 +50,15 @@ export function appendTranscriptEvent(
   return writeChain;
 }
 
+/**
+ * Resolves once every pending append has hit disk. Call before reading the
+ * log so reconciliation can't race with in-flight writes emitted just before
+ * stop().
+ */
+export function flushTranscriptLog(): Promise<void> {
+  return writeChain;
+}
+
 export async function readTranscriptEvents(
   meetingId: string,
 ): Promise<TranscriptRecord[]> {

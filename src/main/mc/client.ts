@@ -167,17 +167,29 @@ export class MCClient extends EventEmitter {
     if (local.length === 0) return { sent: 0, failed: 0, gap: 0, mcHad: 0 };
 
     const base = httpBase(this.baseUrl);
-    let mcRows: Array<{ start_ms: number | null; text: string }> = [];
+    const mcRows: Array<{ id: number; start_ms: number | null; text: string }> = [];
+    // Paginate through the full MC transcript. Server caps at limit=2000 per
+    // call; we use the ascending row id as a cursor (MC's GET supports
+    // `?after=<id>`). Without this, long meetings (>2000 events) would
+    // silently dedupe against only the first page and we'd re-POST the tail.
+    const PAGE_LIMIT = 2000;
+    const MAX_PAGES = 20; // 40k events — far beyond any realistic meeting
+    let after = 0;
     try {
-      const res = await fetch(
-        `${base}/api/meetings/${meetingId}/transcript?limit=2000`,
-        { signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) },
-      );
-      if (!res.ok) {
-        log.warn(`[mc] reconcile GET failed: HTTP ${res.status}`);
-        return { sent: 0, failed: local.length, gap: local.length, mcHad: 0 };
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const res = await fetch(
+          `${base}/api/meetings/${meetingId}/transcript?limit=${PAGE_LIMIT}&after=${after}`,
+          { signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) },
+        );
+        if (!res.ok) {
+          log.warn(`[mc] reconcile GET page ${page} failed: HTTP ${res.status}`);
+          return { sent: 0, failed: local.length, gap: local.length, mcHad: 0 };
+        }
+        const rows = (await res.json()) as typeof mcRows;
+        mcRows.push(...rows);
+        if (rows.length < PAGE_LIMIT) break;
+        after = rows[rows.length - 1].id;
       }
-      mcRows = (await res.json()) as typeof mcRows;
     } catch (err) {
       log.warn('[mc] reconcile GET threw:', err);
       return { sent: 0, failed: local.length, gap: local.length, mcHad: 0 };

@@ -6,6 +6,7 @@ import { MCClient } from '../mc/client';
 import { log } from '../log';
 import {
   appendTranscriptEvent,
+  flushTranscriptLog,
   pruneOldTranscripts,
   readTranscriptEvents,
   transcriptLogPath,
@@ -334,6 +335,10 @@ export class MeetingSession extends EventEmitter {
     // archive + specialist post-processing see the complete transcript.
     if (this.mc && this.meeting) {
       try {
+        // Make sure every queued disk write has landed before we snapshot
+        // the JSONL. Without this, a final event that arrived milliseconds
+        // before stop() could still be in the write chain when we read.
+        await flushTranscriptLog();
         const local = await readTranscriptEvents(this.meeting.id);
         const result = await this.mc.reconcileTranscript(this.meeting.id, local);
         if (result.gap > 0) {
