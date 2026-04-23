@@ -15,6 +15,7 @@ export type DeepgramClientOptions = {
   apiKey: string;
   keyterms?: string[];
   sampleRate?: number;
+  channels?: number;
 };
 
 type DeepgramAlternative = {
@@ -30,6 +31,8 @@ type DeepgramResult = {
   channel?: {
     alternatives?: DeepgramAlternative[];
   };
+  // Present when multichannel=true: [channel_id, total_channels].
+  channel_index?: [number, number];
   is_final?: boolean;
   start?: number;
   duration?: number;
@@ -39,6 +42,7 @@ export class DeepgramClient extends EventEmitter {
   private ws: WebSocket | null = null;
   private readonly apiKey: string;
   private readonly sampleRate: number;
+  private readonly channels: number;
   private readonly keyterms: string[];
   private keepAliveTimer: NodeJS.Timeout | null = null;
   private closed = false;
@@ -47,6 +51,7 @@ export class DeepgramClient extends EventEmitter {
     super();
     this.apiKey = opts.apiKey;
     this.sampleRate = opts.sampleRate ?? 16000;
+    this.channels = opts.channels && opts.channels > 0 ? opts.channels : 1;
     this.keyterms = opts.keyterms ?? [];
   }
 
@@ -70,7 +75,10 @@ export class DeepgramClient extends EventEmitter {
       measurements: 'true',
       encoding: 'linear16',
       sample_rate: String(this.sampleRate),
-      channels: '1',
+      channels: String(this.channels),
+      // Run an independent ASR pass per channel when >1 so mic (ch 0) and
+      // system audio (ch 1) get attributed separately.
+      ...(this.channels > 1 ? { multichannel: 'true' } : {}),
     });
     for (const term of this.keyterms) {
       params.append('keyterm', term);
@@ -150,6 +158,12 @@ export class DeepgramClient extends EventEmitter {
     const alt = msg.channel?.alternatives?.[0];
     if (!alt || !alt.transcript) return;
 
+    // In multichannel mode: channel 0 = mic (you), channel 1 = system audio
+    // (everyone else on the call). Within each channel, within-channel
+    // diarization still splits the remote side into Speaker 0/1/2/etc.
+    const channelId =
+      this.channels > 1 && msg.channel_index ? msg.channel_index[0] : null;
+
     let speaker: string | null = null;
     if (alt.words && alt.words.length > 0) {
       const spkIds = new Set(alt.words.map((w) => w.speaker).filter((s): s is number => typeof s === 'number'));
@@ -158,6 +172,13 @@ export class DeepgramClient extends EventEmitter {
       } else if (spkIds.size > 1) {
         speaker = 'Multiple';
       }
+    }
+    if (channelId === 0) {
+      // Mic channel: always attributed to Will. Override any within-channel
+      // diarization since there's only one person on that mic.
+      speaker = 'You';
+    } else if (channelId === 1 && speaker === null) {
+      speaker = 'Others';
     }
 
     const startMs = Math.round((msg.start ?? 0) * 1000);
@@ -183,6 +204,7 @@ export class DeepgramClient extends EventEmitter {
         entities: alt.entities,
         paragraphs: alt.paragraphs,
         confidence: alt.confidence,
+        channel: channelId ?? undefined,
       };
       this.emit('record', record);
     }

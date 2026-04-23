@@ -49,6 +49,9 @@ export type TranscriptRecord = TranscriptEvent & {
   paragraphs?: unknown;
   // Top-level confidence reported by Deepgram for this alternative.
   confidence?: number;
+  // Multichannel routing: 0 = mic (you), 1 = system audio (others). Absent
+  // in legacy mono captures.
+  channel?: number;
 };
 
 export type SessionState =
@@ -80,6 +83,9 @@ export type StartSessionArgs = {
   // probe AudioContext so Deepgram gets the truth and no JS resampling is
   // needed. Defaults to 48000 if omitted.
   sampleRate?: number;
+  // Number of PCM channels. 2 = multichannel (mic on ch 0, system on ch 1)
+  // with per-channel Deepgram ASR. Defaults to 1 if omitted.
+  channelCount?: number;
 };
 
 export type DetectedMeeting = {

@@ -278,6 +278,9 @@ export function App() {
       specialist: pickedSpecialist,
       title: trimmedTitle || defaultTitle,
       sampleRate,
+      // Capture emits stereo: mic on ch 0, system on ch 1. Deepgram runs
+      // per-channel ASR so "you vs. others" is attributed correctly.
+      channelCount: 2,
     });
     if (!result.ok) {
       setSessionState({ phase: 'error', message: result.error });
